@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  postgres:
+  stonechat_postgres:
     image: postgres:15-alpine
     container_name: stonechat_postgres
     environment:
@@ -14,7 +14,7 @@ services:
     networks:
       - sni_network
 
-  redis:
+  stonechat_redis:
     image: redis:7-alpine
     container_name: stonechat_redis
     command: redis-server --save 60 1 --loglevel warning
@@ -64,8 +64,8 @@ services:
     volumes:
       - stonechat_backend_public:/usr/src/app/public
     depends_on:
-      - postgres
-      - redis
+      - stonechat_postgres
+      - stonechat_redis
     restart: always
     networks:
       - sni_network
