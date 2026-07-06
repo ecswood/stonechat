@@ -24,7 +24,7 @@ services:
     networks:
       - sni_network
 
-  backend:
+  stonechat_backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -70,7 +70,7 @@ services:
     networks:
       - sni_network
 
-  frontend:
+  stonechat_frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
@@ -80,7 +80,7 @@ services:
     ports:
       - "8082:80"
     depends_on:
-      - backend
+      - stonechat_backend
     restart: always
     networks:
       - sni_network
