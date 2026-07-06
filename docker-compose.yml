@@ -36,14 +36,14 @@ services:
       - PROXY_PORT=8080
       - PORT=8080
       - DB_DIALECT=postgres
-      - DB_HOST=postgres
+      - DB_HOST=stonechat_postgres
       - DB_PORT=5432
       - DB_USER=${DB_USER:-stonechat}
       - DB_PASS=${DB_PASS:-mudar_senha_forte_123}
       - DB_NAME=${DB_NAME:-stonechat}
       - JWT_SECRET=${JWT_SECRET:-troque_este_segredo_jwt}
       - JWT_REFRESH_SECRET=${JWT_REFRESH_SECRET:-troque_este_segredo_refresh}
-      - REDIS_URI=redis://redis:6379
+      - REDIS_URI=redis://stonechat_redis:6379
       - REDIS_OPT_LIMITER_MAX=1
       - REDIS_OPT_LIMITER_DURATION=3000
       - USER_LIMIT=10000
