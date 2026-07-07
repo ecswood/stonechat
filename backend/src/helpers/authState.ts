@@ -21,14 +21,25 @@ const authState = async (
   let creds: AuthenticationCreds;
   let keys: any = {};
 
-  const saveState = async () => {
-    try {
-      await whatsapp.update({
-        session: JSON.stringify({ creds, keys }, BufferJSON.replacer, 0)
-      });
-    } catch (error) {
-      console.log(error);
-    }
+  // Baileys fires many key/cred updates in quick succession. Each save
+  // captures its snapshot synchronously but writes to Postgres
+  // asynchronously, so unserialized writes can complete out of order and let
+  // a stale (earlier) snapshot overwrite a newer one. Chaining every save
+  // onto the previous one's promise forces completion order to match call
+  // order, so the persisted row always reflects the latest snapshot.
+  let writeQueue: Promise<void> = Promise.resolve();
+
+  const saveState = () => {
+    writeQueue = writeQueue.then(async () => {
+      try {
+        await whatsapp.update({
+          session: JSON.stringify({ creds, keys }, BufferJSON.replacer, 0)
+        });
+      } catch (error) {
+        console.log(error);
+      }
+    });
+    return writeQueue;
   };
 
   // const getSessionDatabase = await whatsappById(whatsapp.id);
