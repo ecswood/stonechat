@@ -59,7 +59,7 @@ import {
 import typebotListener from "../TypebotServices/typebotListener";
 import QueueIntegrations from "../../models/QueueIntegrations";
 import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIntegrationService";
-import { registerAiAttendance, dispatchAiAction } from "./AiAgentActions";
+import { registerAiAttendance, dispatchAiAction, isAiHandledTicket } from "./AiAgentActions";
 
 const request = require("request");
 
@@ -1299,11 +1299,14 @@ const verifyQueue = async (
   }
 };
 
-export const verifyRating = (ticketTraking: TicketTraking) => {
+export const verifyRating = (
+  ticketTraking: TicketTraking,
+  isAiHandled: boolean = false
+) => {
   if (
     ticketTraking &&
     ticketTraking.finishedAt === null &&
-    ticketTraking.userId !== null &&
+    (ticketTraking.userId !== null || isAiHandled) &&
     ticketTraking.ratingAt !== null
   ) {
     return true;
@@ -1851,8 +1854,9 @@ const handleMessage = async (
 
     try {
       if (!msg.key.fromMe) {
+        const isAiHandled = await isAiHandledTicket(ticket.id, companyId);
 
-        if (ticketTraking !== null && verifyRating(ticketTraking)) {
+        if (ticketTraking !== null && verifyRating(ticketTraking, isAiHandled)) {
           handleRating(parseFloat(bodyMessage), ticket, ticketTraking);
           return;
         }

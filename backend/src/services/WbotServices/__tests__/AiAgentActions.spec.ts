@@ -143,6 +143,9 @@ describe("handleBuscarBoletoAction", () => {
     );
     expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
     expect(sentTexts.some(t => t.includes("00020126"))).toBe(true);
+    expect(
+      sentTexts.some(t => t.includes("Protocolo:") && t.includes("#22"))
+    ).toBe(true);
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
       ticketId: 22,

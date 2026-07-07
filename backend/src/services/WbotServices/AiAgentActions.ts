@@ -122,6 +122,13 @@ export const handleBuscarBoletoAction = async (
     });
   }
 
+  await wbot.sendMessage(jidOf(contact), {
+    text: formatBody(
+      `Estamos finalizando este atendimento. *Protocolo:* #${ticket.id}\n\nQualquer coisa é só chamar!`,
+      contact
+    )
+  });
+
   await UpdateTicketService({
     ticketData: { status: "closed" },
     ticketId: ticket.id,
