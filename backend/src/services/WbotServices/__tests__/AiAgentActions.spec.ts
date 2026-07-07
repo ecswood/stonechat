@@ -93,6 +93,9 @@ describe("handleBuscarBoletoAction", () => {
   beforeEach(() => jest.clearAllMocks());
 
   it("envia o boleto e fecha o ticket quando encontrado", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
     (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
       linkBoleto: "https://sgp/boleto/1",
       linhaDigitavel: "00190...",
@@ -117,6 +120,9 @@ describe("handleBuscarBoletoAction", () => {
   });
 
   it("não inclui 'Linha digitável' nem a string 'null' quando linhaDigitavel é null", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
     (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
       linkBoleto: "https://sgp/boleto/1",
       linhaDigitavel: null,
@@ -138,12 +144,32 @@ describe("handleBuscarBoletoAction", () => {
   });
 
   it("avisa o cliente quando não há boleto em aberto, sem fechar o ticket", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
     (SgpService.buscarBoleto as jest.Mock).mockResolvedValue(null);
 
     await handleBuscarBoletoAction("12345678900", ticket, contact, wbot, 1);
 
+    expect(SgpService.buscarBoleto).toHaveBeenCalled();
     expect(wbot.sendMessage).toHaveBeenCalled();
     expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
+
+  it("recusa e transfere pra Atendimento quando o telefone não bate com o CPF informado", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(11) 3333-4444"]
+    });
+    (Queue.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+
+    await handleBuscarBoletoAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { queueId: 1, useIntegration: false, promptId: null },
+      ticketId: 22,
+      companyId: 1
+    });
   });
 });
 
@@ -157,7 +183,8 @@ describe("handleLiberarConfiancaAction", () => {
   it("libera e fecha o ticket quando bem-sucedido", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       contratoId: 1879,
-      centralSenha: "09cz5dle"
+      centralSenha: "09cz5dle",
+      telefones: ["(43) 98851-5951"]
     });
     (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
       sucesso: true,
@@ -182,7 +209,8 @@ describe("handleLiberarConfiancaAction", () => {
   it("avisa o cliente e transfere para Financeiro quando já usou e não cumpriu (status 2 real)", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       contratoId: 1879,
-      centralSenha: "09cz5dle"
+      centralSenha: "09cz5dle",
+      telefones: ["(43) 98851-5951"]
     });
     (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
       sucesso: false,
@@ -207,6 +235,24 @@ describe("handleLiberarConfiancaAction", () => {
 
     expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
     expect(wbot.sendMessage).toHaveBeenCalled();
+  });
+
+  it("recusa e transfere pra Atendimento quando o telefone não bate com o CPF informado", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoId: 1879,
+      centralSenha: "09cz5dle",
+      telefones: ["(11) 3333-4444"]
+    });
+    (Queue.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { queueId: 1, useIntegration: false, promptId: null },
+      ticketId: 22,
+      companyId: 1
+    });
   });
 });
 
@@ -252,6 +298,9 @@ describe("dispatchAiAction", () => {
   });
 
   it("aciona a busca de boleto e remove a frase-gatilho", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
     (SgpService.buscarBoleto as jest.Mock).mockResolvedValue(null);
 
     const result = await dispatchAiAction(

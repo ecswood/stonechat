@@ -7,6 +7,7 @@ import Contact from "../../models/Contact";
 import SgpService from "../SgpServices/SgpService";
 import { WASocket } from "@whiskeysockets/baileys";
 import formatBody from "../../helpers/Mustache";
+import phoneOwnershipMatches from "../../helpers/PhoneOwnership";
 
 const ACTION_MARKERS = {
   transferirAtendimento: "Ação: Transferir para Atendimento",
@@ -54,6 +55,26 @@ export const handleBuscarBoletoAction = async (
   wbot: WASocket,
   companyId: number
 ): Promise<void> => {
+  const cliente = await SgpService.consultarCliente(cpfCnpj);
+
+  if (!cliente) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody("Não localizei seu cadastro pelo CPF/CNPJ informado.", contact)
+    });
+    return;
+  }
+
+  if (!phoneOwnershipMatches(contact.number, cliente.telefones)) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        "Por segurança, não consegui confirmar que este WhatsApp pertence ao titular desse CPF/CNPJ. Vou te encaminhar para um atendente.",
+        contact
+      )
+    });
+    await transferToQueueByName("Atendimento", ticket, companyId);
+    return;
+  }
+
   const boleto = await SgpService.buscarBoleto(cpfCnpj);
 
   if (!boleto) {
@@ -103,6 +124,17 @@ export const handleLiberarConfiancaAction = async (
     await wbot.sendMessage(jidOf(contact), {
       text: formatBody("Não localizei seu cadastro pelo CPF/CNPJ informado.", contact)
     });
+    return;
+  }
+
+  if (!phoneOwnershipMatches(contact.number, cliente.telefones)) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        "Por segurança, não consegui confirmar que este WhatsApp pertence ao titular desse CPF/CNPJ. Vou te encaminhar para um atendente.",
+        contact
+      )
+    });
+    await transferToQueueByName("Atendimento", ticket, companyId);
     return;
   }
 
