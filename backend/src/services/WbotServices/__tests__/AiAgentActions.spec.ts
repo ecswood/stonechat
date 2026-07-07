@@ -286,4 +286,19 @@ describe("dispatchAiAction", () => {
     expect(result).toBe("Antes preciso do seu CPF.");
     expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
   });
+
+  it("remove a frase-gatilho de Liberar Confiança mesmo sem CPF conhecido, sem chamar o SGP", async () => {
+    const contactSemCpf = { number: "554388515951", cpfCnpj: undefined } as any;
+
+    const result = await dispatchAiAction(
+      "Vou verificar sua condição. Ação: Liberar Confiança",
+      ticket,
+      contactSemCpf,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Vou verificar sua condição.");
+    expect(SgpService.consultarCliente).not.toHaveBeenCalled();
+  });
 });
