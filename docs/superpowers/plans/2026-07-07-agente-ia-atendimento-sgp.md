@@ -32,6 +32,8 @@
 - `backend/src/services/SgpServices/__tests__/SgpService.spec.ts`
 - `backend/src/services/WbotServices/AiAgentActions.ts` — despacho de ação por frase-gatilho + as 4 execuções
 - `backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts`
+- `backend/src/helpers/OpenAiTextToSpeech.ts` — síntese de voz via API da OpenAI (Task 14)
+- `backend/src/helpers/__tests__/OpenAiTextToSpeech.spec.ts`
 
 **Modificar:**
 - `backend/src/models/Contact.ts` — novo campo `cpfCnpj`
@@ -1700,3 +1702,237 @@ docker logs stonechat_backend --since 10m 2>&1 | grep -iE "error|SgpService" | g
 ```
 
 Expected: sem erro relacionado a `SgpService`/`AiAgentActions`. Se houver erro de endpoint SGP (404, formato de resposta inesperado), revisar as Tasks 2-4 com o formato real confirmado.
+
+---
+
+### Task 14: Resposta por voz quando o cliente manda áudio
+
+**Contexto (pedido pelo Edison depois do plano inicial):** o agente deve interpretar mensagens de voz do cliente e responder também em voz — só nesse caso (cliente manda texto → IA responde texto; cliente manda áudio → IA responde áudio).
+
+**Descoberta ao investigar:** `handleOpenAi` já tem um branch pra mensagem de áudio (`else if (msg.message?.audioMessage)`) que já transcreve com Whisper e já monta a pergunta pro GPT — mas **o código que enviaria a resposta ao cliente (texto OU áudio) está inteiro dentro de um comentário `/* ... */`, nunca executa**. Esse branch hoje transcreve e pergunta pro GPT, mas nunca manda nada de volta — bug pré-existente, sem relação com o resto desta feature. O código morto também referenciava `prompt.voice`/`prompt.voiceKey`/`prompt.voiceRegion` (Azure Speech) — **campos que não existem mais no model `Prompt`** (fica óbvio ao comparar com `backend/src/models/Prompt.ts` atual), então nem compilaria se só descomentado.
+
+**Decisão (confirmada com o Edison):** usar a API de Text-to-Speech da própria OpenAI (`POST https://api.openai.com/v1/audio/speech`), reaproveitando a mesma `prompt.apiKey` já configurada — sem precisar de credencial nova do Azure. O SDK `openai` instalado (`v3.3.0`) é anterior ao suporte de TTS, então a chamada é feita direto via `axios` (mesmo padrão já usado em `SgpService.ts`/`providers.ts`), não pelo SDK.
+
+**Limitação conhecida, aceita por ora:** a captura de CPF (Task 10, Step 2) olha pro texto digitado (`bodyMessage`), que fica vazio numa mensagem de áudio pura — então se o cliente disser o CPF em voz, ele não é capturado automaticamente. Fora de escopo por agora (a IA pode pedir pra ele digitar o CPF mesmo estando numa conversa por áudio); revisar depois se virar problema real de uso.
+
+**Files:**
+- Create: `backend/src/helpers/OpenAiTextToSpeech.ts`
+- Test: `backend/src/helpers/__tests__/OpenAiTextToSpeech.spec.ts`
+- Modify: `backend/src/services/WbotServices/wbotMessageListener.ts` (branch de áudio de `handleOpenAi`)
+
+**Interfaces:**
+- Produces: `synthesizeSpeech(text: string, apiKey: string, voice?: string): Promise<Buffer>` — usado no branch de áudio.
+
+- [ ] **Step 1: Escrever o teste do helper de TTS**
+
+```typescript
+// backend/src/helpers/__tests__/OpenAiTextToSpeech.spec.ts
+jest.mock("axios");
+
+// eslint-disable-next-line import/first
+import axios from "axios";
+// eslint-disable-next-line import/first
+import synthesizeSpeech from "../OpenAiTextToSpeech";
+
+describe("synthesizeSpeech", () => {
+  it("chama a API de TTS da OpenAI e retorna um Buffer com o áudio", async () => {
+    const fakeAudioBytes = new Uint8Array([1, 2, 3, 4]);
+    (axios.post as jest.Mock).mockResolvedValue({ data: fakeAudioBytes.buffer });
+
+    const result = await synthesizeSpeech("Olá, tudo bem?", "sk-teste");
+
+    expect(result).toEqual(Buffer.from(fakeAudioBytes.buffer));
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/audio/speech",
+      { model: "tts-1", voice: "alloy", input: "Olá, tudo bem?" },
+      {
+        headers: { Authorization: "Bearer sk-teste" },
+        responseType: "arraybuffer"
+      }
+    );
+  });
+
+  it("usa a voz informada quando passada explicitamente", async () => {
+    const fakeAudioBytes = new Uint8Array([1, 2, 3, 4]);
+    (axios.post as jest.Mock).mockResolvedValue({ data: fakeAudioBytes.buffer });
+
+    await synthesizeSpeech("Oi", "sk-teste", "nova");
+
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://api.openai.com/v1/audio/speech",
+      { model: "tts-1", voice: "nova", input: "Oi" },
+      expect.anything()
+    );
+  });
+});
+```
+
+- [ ] **Step 2: Rodar o teste e confirmar que falha**
+
+```bash
+cd /home/edison/fontes/stonechat/backend
+docker build --target builder -t stonechat-test-builder .
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/helpers/__tests__/OpenAiTextToSpeech.spec.ts --coverage=false
+```
+
+Expected: FAIL — `Cannot find module '../OpenAiTextToSpeech'`.
+
+- [ ] **Step 3: Implementar o helper**
+
+```typescript
+// backend/src/helpers/OpenAiTextToSpeech.ts
+import axios from "axios";
+
+const synthesizeSpeech = async (
+  text: string,
+  apiKey: string,
+  voice: string = "alloy"
+): Promise<Buffer> => {
+  const response = await axios.post(
+    "https://api.openai.com/v1/audio/speech",
+    { model: "tts-1", voice, input: text },
+    {
+      headers: { Authorization: `Bearer ${apiKey}` },
+      responseType: "arraybuffer"
+    }
+  );
+  return Buffer.from(response.data);
+};
+
+export default synthesizeSpeech;
+```
+
+- [ ] **Step 4: Rodar o teste e confirmar que passa**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/helpers/__tests__/OpenAiTextToSpeech.spec.ts --coverage=false
+```
+
+Expected: `PASS`, 2 testes passando.
+
+- [ ] **Step 5: Commit do helper**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/helpers/OpenAiTextToSpeech.ts backend/src/helpers/__tests__/OpenAiTextToSpeech.spec.ts
+git commit -m "Adiciona helper de Text-to-Speech via API da OpenAI"
+```
+
+- [ ] **Step 6: Corrigir o branch de áudio em `wbotMessageListener.ts`**
+
+Adicionar o import no topo (junto aos outros helpers):
+
+```typescript
+import synthesizeSpeech from "../../helpers/OpenAiTextToSpeech";
+```
+
+Dentro do branch `else if (msg.message?.audioMessage)` de `handleOpenAi`, localizar o bloco que hoje é:
+
+```typescript
+    let response = chat.data.choices[0].message?.content;
+
+    if (response?.includes("Ação: Transferir para o setor de atendimento")) {
+      await transferQueue(prompt.queueId, ticket, contact);
+      response = response
+        .replace("Ação: Transferir para o setor de atendimento", "")
+        .trim();
+    }
+    /*if (prompt.voice === "texto") {
+      const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+        text: response!
+      });
+      await verifyMessage(sentMessage!, ticket, contact);
+    } else {
+      const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
+      convertTextToSpeechAndSaveToFile(
+        keepOnlySpecifiedChars(response!),
+        `${publicFolder}/${fileNameWithOutExtension}`,
+        prompt.voiceKey,
+        prompt.voiceRegion,
+        prompt.voice,
+        "mp3"
+      ).then(async () => {
+        try {
+          const sendMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+            audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
+            mimetype: "audio/mpeg",
+            ptt: true
+          });
+          await verifyMediaMessage(sendMessage!, ticket, contact);
+          deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
+          deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.wav`);
+        } catch (error) {
+          console.log(`Erro para responder com audio: ${error}`);
+        }
+      });
+    }*/
+  }
+```
+
+(este é o **segundo** bloco parecido no arquivo — o mesmo aviso da Task 10 vale aqui: **não mexa no branch de texto**, que já foi corrigido. Este bloco fica dentro do `else if (msg.message?.audioMessage)`, identificável pelas linhas de `transcription`/`createTranscription` logo acima dele.)
+
+Substituir por:
+
+```typescript
+    let response = chat.data.choices[0].message?.content ?? "";
+
+    await registerAiAttendance(ticket, ticket.companyId);
+
+    response = await dispatchAiAction(
+      response,
+      ticket,
+      contact,
+      wbot,
+      ticket.companyId
+    );
+
+    const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
+    try {
+      const audioBuffer = await synthesizeSpeech(response, prompt.apiKey);
+      fs.writeFileSync(
+        `${publicFolder}/${fileNameWithOutExtension}.mp3`,
+        audioBuffer
+      );
+      const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+        audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
+        mimetype: "audio/mpeg",
+        ptt: true
+      });
+      await verifyMediaMessage(sentMessage!, ticket, contact);
+      deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
+    } catch (error) {
+      logger.error(`Erro ao responder com áudio: ${error}`);
+      const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+        text: response
+      });
+      await verifyMessage(sentMessage!, ticket, contact);
+    }
+  }
+```
+
+Note o `try/catch`: se a síntese de voz falhar por qualquer motivo (API fora do ar, erro de rede), a IA cai pra responder em **texto** em vez de não responder nada — nunca repete o bug antigo de deixar o cliente sem resposta.
+
+- [ ] **Step 7: Compilar e rodar a suíte completa**
+
+```bash
+cd /home/edison/fontes/stonechat/backend
+docker build --target builder -t stonechat-test-builder .
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest --coverage=false
+```
+
+Expected: TypeScript compila sem erro, todos os testes `PASS`.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/services/WbotServices/wbotMessageListener.ts
+git commit -m "Corrige branch de áudio: IA responde em voz usando TTS da OpenAI"
+```
+
+- [ ] **Step 9: Validação manual (mandar um áudio de teste de verdade)**
+
+Igual à Task 13, mas mandando uma mensagem de **áudio** (não texto) de um WhatsApp real pro número conectado. Confirmar:
+- A IA transcreve, entende, e responde com uma **nota de voz** (não texto).
+- Se pedir boleto/liberação por áudio (com CPF já conhecido de uma conversa anterior em texto), a ação funciona igual ao fluxo de texto.
+- Nos logs, nenhum erro de `synthesizeSpeech`/`OpenAiTextToSpeech`.
