@@ -375,12 +375,16 @@ const MessagesList = ({ ticket, ticketId, isGroup }) => {
     socket.on("ready", () => socket.emit("joinChatBox", `${ticket.id}`));
 
     socket.on(`company-${companyId}-appMessage`, (data) => {
-      if (data.action === "create" && data.message.ticketId === currentTicketId.current) {
+      // data.message.ticketId comes from the DB as a number; currentTicketId.current
+      // comes from the route params (useParams()) as a string. Without String()
+      // on both sides, this comparison is always false and every live message
+      // update is silently dropped.
+      if (data.action === "create" && String(data.message.ticketId) === String(currentTicketId.current)) {
         dispatch({ type: "ADD_MESSAGE", payload: data.message });
         scrollToBottom();
       }
 
-      if (data.action === "update" && data.message.ticketId === currentTicketId.current) {
+      if (data.action === "update" && String(data.message.ticketId) === String(currentTicketId.current)) {
         dispatch({ type: "UPDATE_MESSAGE", payload: data.message });
       }
     });
