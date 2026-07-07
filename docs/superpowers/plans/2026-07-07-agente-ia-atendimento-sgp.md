@@ -290,19 +290,43 @@ git commit -m "Adiciona consulta de cliente por CPF/CNPJ ao SgpService"
 - Consumes: nenhuma (chamado direto por CPF/CNPJ, como `consultarCliente`)
 - Produces: `SgpBoleto` (interface), `sgpService.buscarBoleto(cpfCnpj: string): Promise<SgpBoleto | null>` — usado pela Task 7.
 
-- [ ] **Step 1: Endpoint já confirmado — falta o formato de sucesso**
+- [ ] **Step 1: Endpoint corrigido — CONFIRMADO com CPF real em produção (não é mais suposição)**
 
-**Já confirmado em produção** (ver Global Constraints): o endpoint é `POST /api/ura/fatura2via/`, parâmetro `cpfcnpj` (mesmo nome do `consultacliente`). Testado com CPF fake e retornou `{"msg":"Contrato não localizado","status":0}` — HTTP 200 mesmo no caso de não encontrado (não é 404), com `status: 0` sinalizando falha. **Este formato de "não encontrado" já é real, não é suposição** — usar no Step 4.
+**Descoberta durante a implementação:** `/api/ura/fatura2via/` (usado no design original) **falha para qualquer cliente com mais de um contrato** — retorna `{"msg":"Há mais de um contrato para o CPF/CNPJ informado. Favor informar o id do contrato","status":0}`, sem forma de saber por CPF sozinho qual boleto mostrar. Isso é comum (testado com um CPF real de múltiplos contratos). Por isso esta task usa **`/api/ura/titulos/`** em vez de `fatura2via` — lista TODOS os títulos do CPF (aberto, pago, cancelado, etc, todos os contratos juntos, paginado), sem precisar de contrato específico. Filtramos por `status === "aberto"` no código.
 
-O formato de **sucesso** (link do boleto, linha digitável, PIX copia-e-cola, valor, vencimento) ainda não foi confirmado — não existe fatura de teste com CPF fake. Antes de finalizar esta task, rode com um CPF real que tenha fatura em aberto, com o token novo do `app: "StoneChat"`:
+Testado de verdade em produção (`app: "StoneChat"`, CPF real com um título em aberto):
 
 ```bash
-curl -s -X POST "https://snitelecom.sgp.net.br/api/ura/fatura2via/" \
+curl -s -X POST "https://snitelecom.sgp.net.br/api/ura/titulos/" \
   -H "Content-Type: application/json" \
-  -d '{"token":"'"$SGP_TOKEN"'","app":"StoneChat","cpfcnpj":"<CPF real de teste com fatura em aberto>"}' | python3 -m json.tool
+  -d '{"token":"'"$SGP_TOKEN"'","app":"StoneChat","cpfcnpj":"<cpf>"}'
 ```
 
-Ajuste os nomes de campo no Step 4 conforme a resposta real (o Step 4 abaixo assume `status: 1` pra sucesso e campos dentro de um array `faturas[]` — **essa parte é suposição, confirme antes de prosseguir**).
+Resposta real (campos relevantes de um item com `status: "aberto"`):
+
+```json
+{
+  "paginacao": {"offset": 0, "limit": 250, "parcial": 118, "total": 118},
+  "titulos": [
+    {
+      "id": 72554,
+      "clienteContrato": 1879,
+      "link": "https://snitelecom.sgp.net.br/boleto/73103-VWI6MBJ6L4/",
+      "link_cobranca": "https://snitelecom.sgp.net.br/public/cobranca/73103-VWI6MBJ6L4/",
+      "status": "aberto",
+      "valorCorrigido": 5.0,
+      "codigoBarras": "99999152900000005000000060000000043600000000",
+      "linhaDigitavel": "",
+      "codigoPix": "",
+      "dataVencimento": "2026-08-05"
+    }
+  ]
+}
+```
+
+**Nomes de campo já confirmados, use exatamente estes no Step 4** (não são mais suposição): `link` (URL do boleto), `linhaDigitavel`, `codigoPix`, `valorCorrigido`, `dataVencimento`, `status` (string, valor `"aberto"` é o que filtramos). `linhaDigitavel`/`codigoPix` podem legitimamente vir como string vazia mesmo num título em aberto de verdade (confirmado no exemplo acima, título recém-emitido) — trate como ausente (`null`) quando vazio, não como erro.
+
+Quando não há nenhum título em aberto, `titulos` volta como array vazio (ou só com títulos `pago`/`cancelado`) — trate como não encontrado.
 
 - [ ] **Step 2: Escrever o teste**
 
@@ -315,36 +339,76 @@ describe("SgpService.buscarBoleto", () => {
     process.env.SGP_TOKEN = "token-teste";
   });
 
-  it("retorna os dados do boleto quando há fatura em aberto", async () => {
+  it("retorna os dados do boleto quando há título em aberto", async () => {
     (axios.post as jest.Mock).mockResolvedValue({
       data: {
-        status: 1,
-        faturas: [
+        paginacao: { offset: 0, limit: 250, parcial: 2, total: 2 },
+        titulos: [
           {
-            link_boleto: "https://snitelecom.sgp.net.br/boleto/123",
-            linha_digitavel: "00190.00009 01234.567890 12345.678901 1 23456789012345",
-            pix_copia_cola: "00020126...pix",
-            valor: "99.90",
-            vencimento: "2026-07-15"
+            id: 72554,
+            clienteContrato: 1879,
+            link: "https://snitelecom.sgp.net.br/boleto/73103-VWI6MBJ6L4/",
+            status: "aberto",
+            valorCorrigido: 5.0,
+            codigoBarras: "99999152900000005000000060000000043600000000",
+            linhaDigitavel: "",
+            codigoPix: "",
+            dataVencimento: "2026-08-05"
+          },
+          {
+            id: 64253,
+            clienteContrato: 1,
+            link: "https://snitelecom.sgp.net.br/boleto/64802-FE2JC3EN6H/",
+            status: "cancelado",
+            valorCorrigido: 10.0,
+            codigoBarras: "75699140300000010001437401032884700104542001",
+            linhaDigitavel: "75691.43741 01032.884700 01045.420013 9 14030000001000",
+            codigoPix: "00020101021226950014br.gov.bcb.pix",
+            dataVencimento: "2026-04-01"
           }
         ]
       }
     });
 
-    const result = await SgpService.buscarBoleto("12345678900");
+    const result = await SgpService.buscarBoleto("68197756953");
 
     expect(result).toEqual({
-      linkBoleto: "https://snitelecom.sgp.net.br/boleto/123",
-      linhaDigitavel: "00190.00009 01234.567890 12345.678901 1 23456789012345",
-      pixCopiaCola: "00020126...pix",
-      valor: "99.90",
-      vencimento: "2026-07-15"
+      linkBoleto: "https://snitelecom.sgp.net.br/boleto/73103-VWI6MBJ6L4/",
+      linhaDigitavel: null,
+      pixCopiaCola: null,
+      valor: "5",
+      vencimento: "2026-08-05"
     });
   });
 
-  it("retorna null quando não há fatura em aberto (resposta real confirmada em produção)", async () => {
+  it("retorna null quando não há nenhum título em aberto", async () => {
     (axios.post as jest.Mock).mockResolvedValue({
-      data: { msg: "Contrato não localizado", status: 0 }
+      data: {
+        paginacao: { offset: 0, limit: 250, parcial: 1, total: 1 },
+        titulos: [
+          {
+            id: 64253,
+            clienteContrato: 1,
+            link: "https://snitelecom.sgp.net.br/boleto/64802-FE2JC3EN6H/",
+            status: "cancelado",
+            valorCorrigido: 10.0,
+            codigoBarras: "756991...",
+            linhaDigitavel: "75691...",
+            codigoPix: "",
+            dataVencimento: "2026-04-01"
+          }
+        ]
+      }
+    });
+
+    const result = await SgpService.buscarBoleto("68197756953");
+
+    expect(result).toBeNull();
+  });
+
+  it("retorna null quando o CPF não tem nenhum título", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: { paginacao: { offset: 0, limit: 250, parcial: 0, total: 0 }, titulos: [] }
     });
 
     const result = await SgpService.buscarBoleto("00000000000");
@@ -370,7 +434,7 @@ Adicionar em `SgpService.ts`:
 ```typescript
 export interface SgpBoleto {
   linkBoleto: string;
-  linhaDigitavel: string;
+  linhaDigitavel: string | null;
   pixCopiaCola: string | null;
   valor: string;
   vencimento: string;
@@ -378,26 +442,22 @@ export interface SgpBoleto {
 
 const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
   try {
-    const response = await axios.post(`${sgpUrl()}/api/ura/fatura2via/`, {
+    const response = await axios.post(`${sgpUrl()}/api/ura/titulos/`, {
       token: sgpToken(),
       app: "StoneChat",
       cpfcnpj: cpfCnpj
     });
 
-    // status: 0 = não encontrado (confirmado em produção); qualquer outro
-    // valor assumido como sucesso até validação com CPF real (ver Step 1).
-    if (response.data?.status === 0) return null;
+    const titulos = response.data?.titulos ?? [];
+    const aberto = titulos.find((t: { status: string }) => t.status === "aberto");
+    if (!aberto) return null;
 
-    const faturas = response.data?.faturas ?? [];
-    if (faturas.length === 0) return null;
-
-    const f = faturas[0];
     return {
-      linkBoleto: f.link_boleto ?? "",
-      linhaDigitavel: f.linha_digitavel ?? "",
-      pixCopiaCola: f.pix_copia_cola ?? null,
-      valor: f.valor ?? "",
-      vencimento: f.vencimento ?? ""
+      linkBoleto: aberto.link ?? "",
+      linhaDigitavel: aberto.linhaDigitavel || null,
+      pixCopiaCola: aberto.codigoPix || null,
+      valor: String(aberto.valorCorrigido ?? ""),
+      vencimento: aberto.dataVencimento ?? ""
     };
   } catch {
     return null;
@@ -413,7 +473,7 @@ export default { consultarCliente, buscarBoleto };
 docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/SgpServices/__tests__/SgpService.spec.ts --coverage=false
 ```
 
-Expected: `PASS`, 5 testes passando.
+Expected: `PASS`, 6 testes passando.
 
 - [ ] **Step 6: Commit**
 
