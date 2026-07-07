@@ -8,6 +8,13 @@ import SgpService from "../SgpServices/SgpService";
 import { WASocket } from "@whiskeysockets/baileys";
 import formatBody from "../../helpers/Mustache";
 
+const ACTION_MARKERS = {
+  transferirAtendimento: "Ação: Transferir para Atendimento",
+  transferirTecnico: "Ação: Transferir para Técnico",
+  buscarBoleto: "Ação: Buscar Boleto",
+  liberarConfianca: "Ação: Liberar Confiança"
+} as const;
+
 export const registerAiAttendance = async (
   ticket: Ticket,
   companyId: number
@@ -136,4 +143,36 @@ export const handleLiberarConfiancaAction = async (
     )
   });
   await transferToQueueByName("Atendimento", ticket, companyId);
+};
+
+export const dispatchAiAction = async (
+  responseText: string,
+  ticket: Ticket,
+  contact: Contact,
+  wbot: WASocket,
+  companyId: number
+): Promise<string> => {
+  const cpfCnpj = contact.cpfCnpj;
+
+  if (responseText.includes(ACTION_MARKERS.transferirAtendimento)) {
+    await transferToQueueByName("Atendimento", ticket, companyId);
+    return responseText.replace(ACTION_MARKERS.transferirAtendimento, "").trim();
+  }
+
+  if (responseText.includes(ACTION_MARKERS.transferirTecnico)) {
+    await transferToQueueByName("Técnico", ticket, companyId);
+    return responseText.replace(ACTION_MARKERS.transferirTecnico, "").trim();
+  }
+
+  if (responseText.includes(ACTION_MARKERS.buscarBoleto) && cpfCnpj) {
+    await handleBuscarBoletoAction(cpfCnpj, ticket, contact, wbot, companyId);
+    return responseText.replace(ACTION_MARKERS.buscarBoleto, "").trim();
+  }
+
+  if (responseText.includes(ACTION_MARKERS.liberarConfianca) && cpfCnpj) {
+    await handleLiberarConfiancaAction(cpfCnpj, ticket, contact, wbot, companyId);
+    return responseText.replace(ACTION_MARKERS.liberarConfianca, "").trim();
+  }
+
+  return responseText;
 };

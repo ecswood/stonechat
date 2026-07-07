@@ -34,7 +34,7 @@ import UpdateTicketService from "../../TicketServices/UpdateTicketService";
 // eslint-disable-next-line import/first
 import SgpService from "../../SgpServices/SgpService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction } from "../AiAgentActions";
+import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, dispatchAiAction } from "../AiAgentActions";
 
 describe("registerAiAttendance", () => {
   it("cria a tag 'Atendimento IA' se não existir e aplica ao ticket", async () => {
@@ -186,5 +186,89 @@ describe("handleLiberarConfiancaAction", () => {
 
     expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
     expect(wbot.sendMessage).toHaveBeenCalled();
+  });
+});
+
+describe("dispatchAiAction", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const ticket = { id: 22, companyId: 1 } as any;
+  const contact = { number: "554388515951", cpfCnpj: "12345678900" } as any;
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("remove a frase-gatilho e transfere para Atendimento", async () => {
+    (Queue.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+
+    const result = await dispatchAiAction(
+      "Já vou te transferir. Ação: Transferir para Atendimento",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Já vou te transferir.");
+    expect(Queue.findOne).toHaveBeenCalledWith({
+      where: { name: "Atendimento", companyId: 1 }
+    });
+  });
+
+  it("remove a frase-gatilho e transfere para Técnico", async () => {
+    (Queue.findOne as jest.Mock).mockResolvedValue({ id: 2 });
+
+    const result = await dispatchAiAction(
+      "Vou abrir um chamado técnico. Ação: Transferir para Técnico",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Vou abrir um chamado técnico.");
+    expect(Queue.findOne).toHaveBeenCalledWith({
+      where: { name: "Técnico", companyId: 1 }
+    });
+  });
+
+  it("aciona a busca de boleto e remove a frase-gatilho", async () => {
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue(null);
+
+    const result = await dispatchAiAction(
+      "Já vou consultar. Ação: Buscar Boleto",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Já vou consultar.");
+    expect(SgpService.buscarBoleto).toHaveBeenCalledWith("12345678900");
+  });
+
+  it("aciona a liberação de confiança e remove a frase-gatilho", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue(null);
+
+    const result = await dispatchAiAction(
+      "Vou verificar. Ação: Liberar Confiança",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Vou verificar.");
+    expect(SgpService.consultarCliente).toHaveBeenCalledWith("12345678900");
+  });
+
+  it("retorna o texto original quando não há frase-gatilho", async () => {
+    const result = await dispatchAiAction(
+      "Como posso te ajudar hoje?",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Como posso te ajudar hoje?");
   });
 });
