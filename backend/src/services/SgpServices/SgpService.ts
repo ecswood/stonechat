@@ -7,6 +7,7 @@ export interface SgpCliente {
   clienteId: number;
   contratoId: number;
   centralSenha: string;
+  telefones: string[];
 }
 
 export interface SgpBoleto {
@@ -44,7 +45,10 @@ const consultarCliente = async (
       contratoStatus: c.contratoStatusDisplay ?? "",
       clienteId: c.clienteId ?? 0,
       contratoId: c.contratoId ?? 0,
-      centralSenha: c.contratoCentralSenha ?? ""
+      centralSenha: c.contratoCentralSenha ?? "",
+      telefones: Array.isArray(c.telefones)
+        ? c.telefones.map((t: { contato?: string }) => t.contato ?? "").filter(Boolean)
+        : []
     };
   } catch {
     return null;

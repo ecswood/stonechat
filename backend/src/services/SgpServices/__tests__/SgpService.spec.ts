@@ -22,7 +22,8 @@ describe("SgpService.consultarCliente", () => {
             contratoStatusDisplay: "Ativo",
             clienteId: 42,
             contratoId: 99,
-            contratoCentralSenha: "09cz5dle"
+            contratoCentralSenha: "09cz5dle",
+            telefones: [{ inscricoes: [], tipoContato: "Celular Pessoal", contato: "(43) 98851-5951" }]
           }
         ]
       }
@@ -36,7 +37,8 @@ describe("SgpService.consultarCliente", () => {
       contratoStatus: "Ativo",
       clienteId: 42,
       contratoId: 99,
-      centralSenha: "09cz5dle"
+      centralSenha: "09cz5dle",
+      telefones: ["(43) 98851-5951"]
     });
     expect(axios.post).toHaveBeenCalledWith(
       "https://snitelecom.sgp.net.br/api/ura/consultacliente/",
