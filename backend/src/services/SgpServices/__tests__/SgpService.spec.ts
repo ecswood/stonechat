@@ -21,7 +21,8 @@ describe("SgpService.consultarCliente", () => {
             cpfCnpj: "12345678900",
             contratoStatusDisplay: "Ativo",
             clienteId: 42,
-            contratoId: 99
+            contratoId: 99,
+            contratoCentralSenha: "09cz5dle"
           }
         ]
       }
@@ -34,7 +35,8 @@ describe("SgpService.consultarCliente", () => {
       cpfCnpj: "12345678900",
       contratoStatus: "Ativo",
       clienteId: 42,
-      contratoId: 99
+      contratoId: 99,
+      centralSenha: "09cz5dle"
     });
     expect(axios.post).toHaveBeenCalledWith(
       "https://snitelecom.sgp.net.br/api/ura/consultacliente/",
@@ -142,5 +144,93 @@ describe("SgpService.buscarBoleto", () => {
     const result = await SgpService.buscarBoleto("00000000000");
 
     expect(result).toBeNull();
+  });
+});
+
+describe("SgpService.liberarConfianca", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("retorna sucesso com protocolo e data da promessa quando liberado (status 1, caso real)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        status: 1,
+        razaosocial: "EDISON CARLOS DOS SANTOS",
+        protocolo: "260707144900",
+        liberado: true,
+        data_promessa: "2026-07-08",
+        cpfcnpj: "681.977.569-53",
+        contrato: 1879,
+        msg: "Liberação via Central App -\n   Serviço ID: 1876, Login: edisonsni\n   Motivo: Promessa de Pagamento\n   "
+      }
+    });
+
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
+
+    expect(result).toEqual({
+      sucesso: true,
+      protocolo: "260707144900",
+      dataPromessa: "2026-07-08"
+    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/central/promessapagamento/",
+      { cpfcnpj: "68197756953", senha: "09cz5dle", contrato: 1879 }
+    );
+  });
+
+  it("retorna motivo 'ja_utilizado' quando status é 2 (caso real: limite atingido)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        status: 2,
+        razaosocial: "EDISON CARLOS DOS SANTOS",
+        liberado: false,
+        cpfcnpj: "681.977.569-53",
+        contrato: 1879,
+        msg: "O recurso de promessa de pagamento já atingiu quantidade permitida. Recurso não disponível"
+      }
+    });
+
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
+
+    expect(result).toEqual({
+      sucesso: false,
+      motivo: "ja_utilizado",
+      mensagem: "O recurso de promessa de pagamento já atingiu quantidade permitida. Recurso não disponível"
+    });
+  });
+
+  it("retorna motivo 'erro' quando status é 0 (caso real: sem bloqueio ativo, nada a liberar)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        status: 0,
+        razaosocial: "EDISON CARLOS DOS SANTOS",
+        liberado: false,
+        cpfcnpj: "681.977.569-53",
+        contrato: 1879,
+        msg: ""
+      }
+    });
+
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
+
+    expect(result).toEqual({
+      sucesso: false,
+      motivo: "erro",
+      mensagem: "Não foi possível processar a liberação no momento"
+    });
+  });
+
+  it("retorna motivo 'erro' pra falha de rede/timeout", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
+
+    expect(result).toEqual({
+      sucesso: false,
+      motivo: "erro",
+      mensagem: "Não foi possível processar a liberação no momento"
+    });
   });
 });

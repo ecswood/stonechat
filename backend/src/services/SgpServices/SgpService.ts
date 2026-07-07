@@ -6,6 +6,7 @@ export interface SgpCliente {
   contratoStatus: string;
   clienteId: number;
   contratoId: number;
+  centralSenha: string;
 }
 
 export interface SgpBoleto {
@@ -15,6 +16,10 @@ export interface SgpBoleto {
   valor: string;
   vencimento: string;
 }
+
+export type SgpLiberacaoResultado =
+  | { sucesso: true; protocolo: string; dataPromessa: string }
+  | { sucesso: false; motivo: "ja_utilizado" | "erro"; mensagem: string };
 
 const sgpUrl = (): string => process.env.SGP_URL || "";
 const sgpToken = (): string => process.env.SGP_TOKEN || "";
@@ -38,7 +43,8 @@ const consultarCliente = async (
       cpfCnpj: c.cpfCnpj ?? "",
       contratoStatus: c.contratoStatusDisplay ?? "",
       clienteId: c.clienteId ?? 0,
-      contratoId: c.contratoId ?? 0
+      contratoId: c.contratoId ?? 0,
+      centralSenha: c.contratoCentralSenha ?? ""
     };
   } catch {
     return null;
@@ -69,4 +75,54 @@ const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
   }
 };
 
-export default { consultarCliente, buscarBoleto };
+// Endpoint real: POST /api/central/promessapagamento/ (confirmado ao vivo em produção,
+// nos 3 estados possíveis, contra um contrato real). Autenticação DIFERENTE dos outros
+// métodos deste arquivo: não usa token/app, usa cpfCnpj + senha do Central do Assinante
+// (SgpCliente.centralSenha). `status` é o discriminador confiável da resposta:
+//   0 = sem bloqueio ativo, nada a liberar
+//   1 = liberado com sucesso (só aqui vêm `protocolo` e `data_promessa`, a data é decidida
+//       pelo próprio SGP, não enviamos data no request)
+//   2 = já usou o recurso recentemente ("O recurso de promessa de pagamento já atingiu
+//       quantidade permitida") — é o caso "já utilizou e não cumpriu" descrito pelo Edison
+const liberarConfianca = async (
+  cpfCnpj: string,
+  senhaCentral: string,
+  contratoId: number
+): Promise<SgpLiberacaoResultado> => {
+  try {
+    const response = await axios.post(
+      `${sgpUrl()}/api/central/promessapagamento/`,
+      { cpfcnpj: cpfCnpj, senha: senhaCentral, contrato: contratoId }
+    );
+
+    if (response.data?.status === 1) {
+      return {
+        sucesso: true,
+        protocolo: response.data?.protocolo ?? "",
+        dataPromessa: response.data?.data_promessa ?? ""
+      };
+    }
+
+    if (response.data?.status === 2) {
+      return {
+        sucesso: false,
+        motivo: "ja_utilizado",
+        mensagem: response.data?.msg ?? "Você já utilizou esse recurso recentemente."
+      };
+    }
+
+    return {
+      sucesso: false,
+      motivo: "erro",
+      mensagem: "Não foi possível processar a liberação no momento"
+    };
+  } catch {
+    return {
+      sucesso: false,
+      motivo: "erro",
+      mensagem: "Não foi possível processar a liberação no momento"
+    };
+  }
+};
+
+export default { consultarCliente, buscarBoleto, liberarConfianca };
