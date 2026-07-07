@@ -78,3 +78,62 @@ export const handleBuscarBoletoAction = async (
     companyId
   });
 };
+
+export const handleLiberarConfiancaAction = async (
+  cpfCnpj: string,
+  ticket: Ticket,
+  contact: Contact,
+  wbot: WASocket,
+  companyId: number
+): Promise<void> => {
+  const cliente = await SgpService.consultarCliente(cpfCnpj);
+
+  if (!cliente) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody("Não localizei seu cadastro pelo CPF/CNPJ informado.", contact)
+    });
+    return;
+  }
+
+  const resultado = await SgpService.liberarConfianca(
+    cpfCnpj,
+    cliente.centralSenha,
+    cliente.contratoId
+  );
+
+  if (resultado.sucesso) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        `Pronto! Liberei sua conexão por confiança até *${resultado.dataPromessa}*. Aguarde alguns minutos e verifique se voltou a funcionar.\n\n*Protocolo:* ${resultado.protocolo}`,
+        contact
+      )
+    });
+    await UpdateTicketService({
+      ticketData: { status: "closed" },
+      ticketId: ticket.id,
+      companyId
+    });
+    return;
+  }
+
+  if (resultado.sucesso === false) {
+    if (resultado.motivo === "ja_utilizado") {
+      await wbot.sendMessage(jidOf(contact), {
+        text: formatBody(
+          "Você já utilizou a liberação por confiança recentemente, então não posso liberar automaticamente dessa vez. Vou te encaminhar para o setor financeiro.",
+          contact
+        )
+      });
+      await transferToQueueByName("Financeiro", ticket, companyId);
+      return;
+    }
+  }
+
+  await wbot.sendMessage(jidOf(contact), {
+    text: formatBody(
+      "Não consegui processar a liberação no momento. Vou te encaminhar para um atendente.",
+      contact
+    )
+  });
+  await transferToQueueByName("Atendimento", ticket, companyId);
+};

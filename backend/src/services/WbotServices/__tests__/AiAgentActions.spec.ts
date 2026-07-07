@@ -16,7 +16,11 @@ jest.mock("../../TicketServices/UpdateTicketService", () => ({
 }));
 jest.mock("../../SgpServices/SgpService", () => ({
   __esModule: true,
-  default: { buscarBoleto: jest.fn() }
+  default: {
+    buscarBoleto: jest.fn(),
+    consultarCliente: jest.fn(),
+    liberarConfianca: jest.fn()
+  }
 }));
 
 // eslint-disable-next-line import/first
@@ -30,7 +34,7 @@ import UpdateTicketService from "../../TicketServices/UpdateTicketService";
 // eslint-disable-next-line import/first
 import SgpService from "../../SgpServices/SgpService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction } from "../AiAgentActions";
+import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction } from "../AiAgentActions";
 
 describe("registerAiAttendance", () => {
   it("cria a tag 'Atendimento IA' se não existir e aplica ao ticket", async () => {
@@ -119,5 +123,68 @@ describe("handleBuscarBoletoAction", () => {
 
     expect(wbot.sendMessage).toHaveBeenCalled();
     expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleLiberarConfiancaAction", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const ticket = { id: 22, companyId: 1 } as any;
+  const contact = { number: "554388515951" } as any;
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("libera e fecha o ticket quando bem-sucedido", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoId: 1879,
+      centralSenha: "09cz5dle"
+    });
+    (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
+      sucesso: true,
+      protocolo: "260707144900",
+      dataPromessa: "2026-07-08"
+    });
+
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(SgpService.liberarConfianca).toHaveBeenCalledWith(
+      "68197756953",
+      "09cz5dle",
+      1879
+    );
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { status: "closed" },
+      ticketId: 22,
+      companyId: 1
+    });
+  });
+
+  it("avisa o cliente e transfere para Financeiro quando já usou e não cumpriu (status 2 real)", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoId: 1879,
+      centralSenha: "09cz5dle"
+    });
+    (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
+      sucesso: false,
+      motivo: "ja_utilizado",
+      mensagem: "O recurso de promessa de pagamento já atingiu quantidade permitida. Recurso não disponível"
+    });
+    (Queue.findOne as jest.Mock).mockResolvedValue({ id: 3 });
+
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { queueId: 3, useIntegration: false, promptId: null },
+      ticketId: 22,
+      companyId: 1
+    });
+  });
+
+  it("não libera quando o cliente não é encontrado no SGP", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue(null);
+
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
+    expect(wbot.sendMessage).toHaveBeenCalled();
   });
 });
