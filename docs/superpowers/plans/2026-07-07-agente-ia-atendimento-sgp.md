@@ -1437,10 +1437,12 @@ git commit -m "Adiciona despacho central de ações do agente de IA por frase-ga
 ### Task 10: Integração no `handleOpenAi` — CPF, protocolo e despacho de ação
 
 **Files:**
-- Modify: `backend/src/services/WbotServices/wbotMessageListener.ts:643-745` (função `handleOpenAi`)
+- Modify: `backend/src/services/WbotServices/wbotMessageListener.ts` (função `handleOpenAi`, hoje começando por volta da linha 645)
 
 **Interfaces:**
 - Consumes: `Contact.cpfCnpj` (Task 1), `registerAiAttendance` e `dispatchAiAction` (Tasks 5, 9), `validaCpfCnpj` (já existe no próprio arquivo)
+
+**Atenção — `handleOpenAi` tem DOIS branches parecidos, só mexa no primeiro:** a função tem um branch pra mensagem de texto (`if (msg.message?.conversation || msg.message?.extendedTextMessage?.text)`) e outro pra mensagem de áudio (`else if (msg.message?.audioMessage)`, transcrita via Whisper). Os dois têm um bloco quase idêntico (`let response = chat.data.choices[0].message?.content; if (response?.includes("Ação: Transferir..."))...`). **Só edite a ocorrência do branch de TEXTO.** O branch de áudio tem um bug pré-existente e sem relação com esta feature — depois de calcular `response`, todo o código que enviaria a resposta (`wbot.sendMessage`) está dentro de um comentário `/* ... */` nunca executado, então mensagens de áudio hoje não recebem resposta nenhuma da IA. Isso é fora do escopo desta task — não tente consertar, só não edite esse segundo bloco por engano (`grep`/busca por esse trecho vai retornar 2 resultados; use o CONTEÚDO completo do bloco "antes" do Step 4, que inclui `wbot.sendMessage`+`verifyMessage` logo em seguida, pra identificar o branch certo — só o de texto tem esse final).
 
 - [ ] **Step 1: Adicionar o import no topo de `wbotMessageListener.ts`**
 
@@ -1450,7 +1452,7 @@ import { registerAiAttendance, dispatchAiAction } from "./AiAgentActions";
 
 - [ ] **Step 2: Capturar e persistir o CPF quando o cliente responder**
 
-Dentro de `handleOpenAi`, logo após a linha `const bodyMessage = getBodyMessage(msg);` (linha ~649), adicionar:
+Dentro de `handleOpenAi`, logo após a linha `const bodyMessage = getBodyMessage(msg);` (perto do início da função, antes de qualquer outra lógica), adicionar:
 
 ```typescript
   if (!contact.cpfCnpj && bodyMessage) {
@@ -1464,7 +1466,7 @@ Dentro de `handleOpenAi`, logo após a linha `const bodyMessage = getBodyMessage
   }
 ```
 
-- [ ] **Step 3: Atualizar o `promptSystem` (linhas ~636-640) com contexto de CPF, protocolo e as 4 instruções de ação**
+- [ ] **Step 3: Atualizar o `promptSystem` (bloco `const promptSystem = ...`, usado pelos dois branches) com contexto de CPF, protocolo e as 4 instruções de ação**
 
 Substituir o bloco atual:
 
@@ -1501,7 +1503,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
 
 - [ ] **Step 4: Substituir o despacho de ação hardcoded pelo `dispatchAiAction`**
 
-Substituir (linhas ~727-735):
+Substituir, **só no branch de TEXTO** (ver aviso no topo desta task):
 
 ```typescript
     let response = chat.data.choices[0].message?.content;
