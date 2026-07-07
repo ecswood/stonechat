@@ -15,6 +15,7 @@ import Whatsapp from "../models/Whatsapp";
 import { logger } from "../utils/logger";
 import MAIN_LOGGER from "@whiskeysockets/baileys/lib/Utils/logger";
 import authState from "../helpers/authState";
+import getMessageForRetry from "../helpers/GetMessageForRetry";
 import { Boom } from "@hapi/boom";
 import AppError from "../errors/AppError";
 import { getIO } from "./socket";
@@ -24,7 +25,10 @@ import DeleteBaileysService from "../services/BaileysServices/DeleteBaileysServi
 import NodeCache from 'node-cache';
 
 const loggerBaileys = MAIN_LOGGER.child({});
-loggerBaileys.level = "error";
+// "error" hid Baileys' own retry/session warnings (e.g. "recv retry
+// request but message not available") — exactly the kind of diagnostic
+// that would have surfaced the missing getMessage handler sooner.
+loggerBaileys.level = "warn";
 
 type Session = WASocket & {
   id?: number;
@@ -106,6 +110,7 @@ export const initWASocket = async (whatsapp: Whatsapp): Promise<Session> => {
           // keepAliveIntervalMs: 1000 * 60 * 10 * 3,
           msgRetryCounterCache,
           shouldIgnoreJid: jid => isJidBroadcast(jid),
+          getMessage: getMessageForRetry,
         });
 
         // wsocket = makeWASocket({
