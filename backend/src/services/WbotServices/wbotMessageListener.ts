@@ -808,27 +808,29 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       ticket.companyId
     );
 
-    const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
-    try {
-      const audioBuffer = await synthesizeSpeech(response, prompt.apiKey);
-      fs.writeFileSync(
-        `${publicFolder}/${fileNameWithOutExtension}.mp3`,
-        audioBuffer
-      );
-      const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-        audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
-        mimetype: "audio/mpeg",
-        ptt: true
-      });
-      await verifyMediaMessage(sentMessage!, ticket, contact);
-    } catch (error) {
-      logger.error(`Erro ao responder com áudio: ${error}`);
-      const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-        text: response
-      });
-      await verifyMessage(sentMessage!, ticket, contact);
-    } finally {
-      deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
+    if (response.trim()) {
+      const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
+      try {
+        const audioBuffer = await synthesizeSpeech(response, prompt.apiKey);
+        fs.writeFileSync(
+          `${publicFolder}/${fileNameWithOutExtension}.mp3`,
+          audioBuffer
+        );
+        const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+          audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
+          mimetype: "audio/mpeg",
+          ptt: true
+        });
+        await verifyMediaMessage(sentMessage!, ticket, contact);
+      } catch (error) {
+        logger.error(`Erro ao responder com áudio: ${error}`);
+        const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+          text: response
+        });
+        await verifyMessage(sentMessage!, ticket, contact);
+      } finally {
+        deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
+      }
     }
   }
   messagesOpenAi = [];
