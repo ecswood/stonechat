@@ -2383,3 +2383,239 @@ cd /home/edison/fontes/stonechat
 git add backend/src/services/WbotServices/wbotMessageListener.ts
 git commit -m "Adiciona instrução de desvincular CPF ao promptSystem do agente de IA"
 ```
+
+---
+
+### Task 17: Mensagem explícita de encerramento + pesquisa de satisfação funcionando para tickets da IA
+
+**Contexto (achado na validação real com o Edison, Task 13):** dois problemas relacionados, descobertos testando de verdade:
+
+1. Depois de entregar o boleto, a IA não manda nenhuma mensagem própria de "encerramento" com o protocolo — só o conteúdo do boleto. O Edison quer uma mensagem explícita de encerramento mencionando o protocolo antes de fechar.
+
+2. **Bug real, mais sério:** quando o ticket fecha e a pesquisa de satisfação é enviada (mecanismo já existente do StoneChat, `UpdateTicketService`/`handleRating`/`verifyRating` em `wbotMessageListener.ts`), e o cliente responde com um número (1-3), a IA intercepta essa resposta como se fosse uma mensagem nova da conversa — porque `verifyRating` exige `ticketTraking.userId !== null` pra reconhecer a resposta como nota da pesquisa, e tickets 100% atendidos pela IA nunca têm um `userId` humano associado. Confirmado ao vivo: o Edison digitou "3" pra responder a pesquisa e a IA reabriu o assunto do boleto.
+
+**Decisão de design:** estender `verifyRating` pra também reconhecer como válido um ticket que tenha a tag "Atendimento IA" (Task 5), sem remover a checagem por `userId` já existente (aditivo, não deve mudar nada pro fluxo de atendimento humano já existente).
+
+**Files:**
+- Modify: `backend/src/services/WbotServices/AiAgentActions.ts` — extrai constante do nome da tag + nova função `isAiHandledTicket`
+- Modify: `backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts`
+- Modify: `backend/src/services/WbotServices/wbotMessageListener.ts` — `verifyRating` aceita novo parâmetro; call site (perto de `handleRating`) passa a checagem; `handleBuscarBoletoAction`/`handleLiberarConfiancaAction` ganham mensagem explícita de encerramento
+
+**Interfaces:**
+- Produces: `AI_ATTENDANCE_TAG_NAME` (constante exportada), `isAiHandledTicket(ticketId: number, companyId: number): Promise<boolean>`
+
+- [ ] **Step 1: Extrair a constante do nome da tag e escrever o teste de `isAiHandledTicket`**
+
+Em `AiAgentActions.ts`, substituir a string literal `"Atendimento IA"` (usada hoje dentro de `registerAiAttendance`) por uma constante exportada:
+
+```typescript
+export const AI_ATTENDANCE_TAG_NAME = "Atendimento IA";
+```
+
+E usar essa constante nos dois lugares de `registerAiAttendance` que hoje têm a string `"Atendimento IA"` hardcoded.
+
+Adicionar o teste em `AiAgentActions.spec.ts`:
+
+```typescript
+describe("isAiHandledTicket", () => {
+  it("retorna true quando o ticket tem a tag Atendimento IA", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue({ id: 5 });
+    (TicketTag.findOne as jest.Mock) = jest.fn().mockResolvedValue({ id: 1 });
+
+    const result = await isAiHandledTicket(22, 1);
+
+    expect(result).toBe(true);
+    expect(Tag.findOne).toHaveBeenCalledWith({
+      where: { name: "Atendimento IA", companyId: 1 }
+    });
+  });
+
+  it("retorna false quando a tag não existe pra essa empresa", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue(null);
+
+    const result = await isAiHandledTicket(22, 1);
+
+    expect(result).toBe(false);
+  });
+
+  it("retorna false quando a tag existe mas não está aplicada nesse ticket", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue({ id: 5 });
+    (TicketTag.findOne as jest.Mock) = jest.fn().mockResolvedValue(null);
+
+    const result = await isAiHandledTicket(22, 1);
+
+    expect(result).toBe(false);
+  });
+});
+```
+
+Ajustar os mocks de `Tag`/`TicketTag` no topo do arquivo de teste pra incluir `findOne` (hoje só têm `findOrCreate`):
+
+```typescript
+jest.mock("../../../models/Tag", () => ({
+  __esModule: true,
+  default: { findOrCreate: jest.fn(), findOne: jest.fn() }
+}));
+jest.mock("../../../models/TicketTag", () => ({
+  __esModule: true,
+  default: { findOrCreate: jest.fn(), findOne: jest.fn() }
+}));
+```
+
+- [ ] **Step 2: Rodar o teste e confirmar que falha**
+
+```bash
+cd /home/edison/fontes/stonechat/backend
+docker build --target builder -t stonechat-test-builder .
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/WbotServices/__tests__/AiAgentActions.spec.ts --coverage=false
+```
+
+Expected: FAIL — `isAiHandledTicket is not a function`.
+
+- [ ] **Step 3: Implementar `isAiHandledTicket`**
+
+Adicionar em `AiAgentActions.ts`, depois de `registerAiAttendance`:
+
+```typescript
+export const isAiHandledTicket = async (
+  ticketId: number,
+  companyId: number
+): Promise<boolean> => {
+  const tag = await Tag.findOne({
+    where: { name: AI_ATTENDANCE_TAG_NAME, companyId }
+  });
+  if (!tag) return false;
+
+  const ticketTag = await TicketTag.findOne({
+    where: { ticketId, tagId: tag.id }
+  });
+  return ticketTag !== null;
+};
+```
+
+- [ ] **Step 4: Rodar o teste e confirmar que passa**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/WbotServices/__tests__/AiAgentActions.spec.ts --coverage=false
+```
+
+Expected: `PASS`, todos os testes do arquivo.
+
+- [ ] **Step 5: Commit**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/services/WbotServices/AiAgentActions.ts backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts
+git commit -m "Adiciona isAiHandledTicket ao AiAgentActions"
+```
+
+- [ ] **Step 6: Estender `verifyRating` pra reconhecer tickets atendidos por IA**
+
+Em `wbotMessageListener.ts`, localizar:
+
+```typescript
+export const verifyRating = (ticketTraking: TicketTraking) => {
+  if (
+    ticketTraking &&
+    ticketTraking.finishedAt === null &&
+    ticketTraking.userId !== null &&
+    ticketTraking.ratingAt !== null
+  ) {
+    return true;
+  }
+  return false;
+};
+```
+
+Substituir por:
+
+```typescript
+export const verifyRating = (
+  ticketTraking: TicketTraking,
+  isAiHandled: boolean = false
+) => {
+  if (
+    ticketTraking &&
+    ticketTraking.finishedAt === null &&
+    (ticketTraking.userId !== null || isAiHandled) &&
+    ticketTraking.ratingAt !== null
+  ) {
+    return true;
+  }
+  return false;
+};
+```
+
+E no import de `AiAgentActions` já existente (Task 10), adicionar `isAiHandledTicket`:
+
+```typescript
+import { registerAiAttendance, dispatchAiAction, isAiHandledTicket } from "./AiAgentActions";
+```
+
+Localizar o call site (busque por `verifyRating(ticketTraking)`):
+
+```typescript
+    if (!msg.key.fromMe) {
+
+      if (ticketTraking !== null && verifyRating(ticketTraking)) {
+        handleRating(parseFloat(bodyMessage), ticket, ticketTraking);
+        return;
+      }
+    }
+```
+
+Substituir por:
+
+```typescript
+    if (!msg.key.fromMe) {
+      const isAiHandled = await isAiHandledTicket(ticket.id, companyId);
+
+      if (ticketTraking !== null && verifyRating(ticketTraking, isAiHandled)) {
+        handleRating(parseFloat(bodyMessage), ticket, ticketTraking);
+        return;
+      }
+    }
+```
+
+Não há teste automatizado pra esse trecho (não existe suíte pra essa função no arquivo, mesma situação de outras integrações da Task 10) — a verificação é manual (Step 9).
+
+- [ ] **Step 7: Adicionar mensagem explícita de encerramento com protocolo em `handleBuscarBoletoAction`**
+
+Em `AiAgentActions.ts`, depois de enviar o boleto e o PIX (se houver), antes de `UpdateTicketService`, adicionar:
+
+```typescript
+  await wbot.sendMessage(jidOf(contact), {
+    text: formatBody(
+      `Estamos finalizando este atendimento. *Protocolo:* #${ticket.id}\n\nQualquer coisa é só chamar!`,
+      contact
+    )
+  });
+
+  await UpdateTicketService({
+    ticketData: { status: "closed" },
+    ticketId: ticket.id,
+    companyId
+  });
+```
+
+Ajustar o teste existente `"envia o boleto e fecha o ticket quando encontrado"` em `AiAgentActions.spec.ts` — adicionar uma verificação de que uma das mensagens enviadas contém `"Protocolo:"` e o id do ticket usado no teste (ex: `#22`, conforme o fixture já existente).
+
+- [ ] **Step 8: Rodar os testes, compilar e confirmar que passam**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest --coverage=false
+```
+
+Expected: TypeScript compila sem erro, todos os testes `PASS`.
+
+- [ ] **Step 9: Commit**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/services/WbotServices/AiAgentActions.ts backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts backend/src/services/WbotServices/wbotMessageListener.ts
+git commit -m "Corrige pesquisa de satisfação para tickets atendidos por IA e adiciona mensagem de encerramento com protocolo"
+```
+
+- [ ] **Step 10: Validação manual (repetir o teste real que encontrou o bug)**
+
+Repetir o fluxo real: pedir boleto pelo WhatsApp real (CPF já conhecido), confirmar que a IA manda a mensagem de encerramento com o protocolo, o ticket fecha, a pesquisa é enviada, e responder com um número (ex: "3") — confirmar que dessa vez a resposta é registrada como nota (não reabre o assunto do boleto) e o ticket fecha de fato (`status: closed` no banco, sem precisar de uma segunda tentativa).
