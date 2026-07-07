@@ -1936,3 +1936,287 @@ Igual à Task 13, mas mandando uma mensagem de **áudio** (não texto) de um Wha
 - A IA transcreve, entende, e responde com uma **nota de voz** (não texto).
 - Se pedir boleto/liberação por áudio (com CPF já conhecido de uma conversa anterior em texto), a ação funciona igual ao fluxo de texto.
 - Nos logs, nenhum erro de `synthesizeSpeech`/`OpenAiTextToSpeech`.
+
+---
+
+### Task 15: Verificação de propriedade do CPF por telefone cadastrado no SGP
+
+**Contexto (achado pela revisão final de código, confirmado com o Edison):** hoje qualquer pessoa que mande mensagem pro número pode digitar QUALQUER CPF/CNPJ válido — mesmo de outra pessoa — e a IA entrega boleto, valor, vencimento e link de pagamento dela, ou até aciona liberação de confiança no contrato de um estranho. Não existe checagem de que quem está conversando é o dono do CPF informado. O Edison pediu uma trava antes de lançar.
+
+**Decisão de design:** a resposta de `consultarCliente` já traz os telefones cadastrados do cliente no SGP (campo `telefones`, confirmado real em produção: `[{"contato":"(43)99933-2300", ...}]`). Antes de entregar boleto ou liberar confiança, comparamos o número de WhatsApp de quem está conversando (`contact.number`) contra os telefones cadastrados — se nenhum bater, não prosseguimos, avisamos o cliente e transferimos pra fila `Atendimento`.
+
+**Cuidado com formato de telefone:** números de WhatsApp armazenados neste projeto às vezes perdem o "9" inicial do celular (bug antigo já documentado — `554388515951` sem o 9, em vez de `5543988515951`), e o SGP formata telefone como `"(43)99933-2300"` (com DDD entre parênteses, sem DDI). Comparar dígito a dígito o número inteiro não funciona. A comparação correta é pelos **últimos 8 dígitos** (o número da linha, sem DDI/DDD/9º dígito) — isso resolve as duas ambiguidades de uma vez.
+
+**Files:**
+- Create: `backend/src/helpers/PhoneOwnership.ts`
+- Test: `backend/src/helpers/__tests__/PhoneOwnership.spec.ts`
+- Modify: `backend/src/services/SgpServices/SgpService.ts` — `SgpCliente` ganha campo `telefones: string[]`
+- Modify: `backend/src/services/SgpServices/__tests__/SgpService.spec.ts`
+- Modify: `backend/src/services/WbotServices/AiAgentActions.ts` — `handleBuscarBoletoAction` e `handleLiberarConfiancaAction` passam a checar a propriedade do telefone
+- Modify: `backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts`
+
+**Interfaces:**
+- Produces: `phoneOwnershipMatches(waNumber: string, sgpTelefones: string[]): boolean`
+
+- [ ] **Step 1: Escrever o teste do helper de comparação de telefone**
+
+```typescript
+// backend/src/helpers/__tests__/PhoneOwnership.spec.ts
+import phoneOwnershipMatches from "../PhoneOwnership";
+
+describe("phoneOwnershipMatches", () => {
+  it("retorna true quando os últimos 8 dígitos batem, apesar de formatos diferentes", () => {
+    const result = phoneOwnershipMatches("554388515951", [
+      "(43) 98851-5951"
+    ]);
+
+    expect(result).toBe(true);
+  });
+
+  it("retorna true quando bate com QUALQUER um dos telefones cadastrados", () => {
+    const result = phoneOwnershipMatches("554388515951", [
+      "(11) 3333-4444",
+      "(43) 98851-5951"
+    ]);
+
+    expect(result).toBe(true);
+  });
+
+  it("retorna false quando não bate com nenhum telefone cadastrado", () => {
+    const result = phoneOwnershipMatches("554388515951", [
+      "(11) 3333-4444"
+    ]);
+
+    expect(result).toBe(false);
+  });
+
+  it("retorna false quando não há telefones cadastrados", () => {
+    const result = phoneOwnershipMatches("554388515951", []);
+
+    expect(result).toBe(false);
+  });
+});
+```
+
+- [ ] **Step 2: Rodar o teste e confirmar que falha**
+
+```bash
+cd /home/edison/fontes/stonechat/backend
+docker build --target builder -t stonechat-test-builder .
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/helpers/__tests__/PhoneOwnership.spec.ts --coverage=false
+```
+
+Expected: FAIL — `Cannot find module '../PhoneOwnership'`.
+
+- [ ] **Step 3: Implementar o helper**
+
+```typescript
+// backend/src/helpers/PhoneOwnership.ts
+// Números de WhatsApp neste projeto às vezes perdem o 9º dígito do celular
+// na hora de salvar (bug antigo já documentado), e o SGP formata telefone
+// com parênteses/traço, sem DDI. Comparar pelos últimos 8 dígitos (a linha,
+// sem DDI/DDD/9) resolve as duas ambiguidades de uma vez.
+const last8Digits = (phone: string): string => phone.replace(/\D/g, "").slice(-8);
+
+const phoneOwnershipMatches = (
+  waNumber: string,
+  sgpTelefones: string[]
+): boolean => {
+  const waDigits = last8Digits(waNumber);
+  return sgpTelefones.some(tel => last8Digits(tel) === waDigits);
+};
+
+export default phoneOwnershipMatches;
+```
+
+- [ ] **Step 4: Rodar o teste e confirmar que passa**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/helpers/__tests__/PhoneOwnership.spec.ts --coverage=false
+```
+
+Expected: `PASS`, 4 testes passando.
+
+- [ ] **Step 5: Commit do helper**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/helpers/PhoneOwnership.ts backend/src/helpers/__tests__/PhoneOwnership.spec.ts
+git commit -m "Adiciona verificação de propriedade de telefone (últimos 8 dígitos)"
+```
+
+- [ ] **Step 6: Estender `SgpCliente`/`consultarCliente` com o campo `telefones`**
+
+Em `SgpService.ts`, adicionar `telefones: string[];` à interface `SgpCliente` (depois de `centralSenha`), e no mapeamento de `consultarCliente`:
+
+```typescript
+telefones: Array.isArray(c.telefones)
+  ? c.telefones.map((t: { contato?: string }) => t.contato ?? "").filter(Boolean)
+  : [],
+```
+
+Atualizar o teste de sucesso já existente em `SgpService.spec.ts` (`describe("SgpService.consultarCliente")`) — adicionar aos dados mockados de `contratos[0]`:
+
+```typescript
+telefones: [{ inscricoes: [], tipoContato: "Celular Pessoal", contato: "(43) 98851-5951" }]
+```
+
+e ao objeto esperado em `toEqual`:
+
+```typescript
+telefones: ["(43) 98851-5951"]
+```
+
+- [ ] **Step 7: Rodar os testes do SgpService e confirmar que falham, depois implementar e confirmar que passam**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/SgpServices/__tests__/SgpService.spec.ts --coverage=false
+```
+
+Esperado falhar antes do Step 6, `PASS` com 10 testes depois.
+
+- [ ] **Step 8: Commit**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/services/SgpServices/SgpService.ts backend/src/services/SgpServices/__tests__/SgpService.spec.ts
+git commit -m "Adiciona campo telefones ao SgpCliente"
+```
+
+- [ ] **Step 9: Escrever os testes que comprovam a trava nas duas ações**
+
+Adicionar em `AiAgentActions.spec.ts`, dentro de `describe("handleBuscarBoletoAction", ...)`:
+
+```typescript
+it("recusa e transfere pra Atendimento quando o telefone não bate com o CPF informado", async () => {
+  (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+    telefones: ["(11) 3333-4444"]
+  });
+  (Queue.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+
+  await handleBuscarBoletoAction("68197756953", ticket, contact, wbot, 1);
+
+  expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
+  expect(UpdateTicketService).toHaveBeenCalledWith({
+    ticketData: { queueId: 1, useIntegration: false, promptId: null },
+    ticketId: 22,
+    companyId: 1
+  });
+});
+```
+
+(o `contact` já usado nesse describe block tem `number: "554388515951"` — confirme contra o topo do arquivo; ajuste o CPF/telefone do teste acima se o fixture for diferente.)
+
+E dentro de `describe("handleLiberarConfiancaAction", ...)`:
+
+```typescript
+it("recusa e transfere pra Atendimento quando o telefone não bate com o CPF informado", async () => {
+  (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+    contratoId: 1879,
+    centralSenha: "09cz5dle",
+    telefones: ["(11) 3333-4444"]
+  });
+  (Queue.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+
+  await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
+
+  expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
+  expect(UpdateTicketService).toHaveBeenCalledWith({
+    ticketData: { queueId: 1, useIntegration: false, promptId: null },
+    ticketId: 22,
+    companyId: 1
+  });
+});
+```
+
+**Importante:** os testes de sucesso já existentes (`"libera e fecha o ticket quando bem-sucedido"` em ambos os describes) vão passar a falhar depois do Step 10, porque agora `handleBuscarBoletoAction` também chama `consultarCliente` primeiro — ajuste os mocks desses testes existentes pra incluir `telefones` com um valor que bata com `contact.number` (ex: `telefones: ["(43) 98851-5951"]` se `contact.number` for `"554388515951"`, já que os últimos 8 dígitos batem — ver Step 1).
+
+- [ ] **Step 10: Rodar os testes e confirmar que falham**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/WbotServices/__tests__/AiAgentActions.spec.ts --coverage=false
+```
+
+Expected: FAIL — os 2 testes novos falham porque a checagem ainda não existe (a ação prossegue mesmo sem telefone bater), e possivelmente os testes de sucesso antigos já quebram por causa do ajuste de mock do Step 9.
+
+- [ ] **Step 11: Implementar a trava nas duas ações**
+
+Import novo no topo de `AiAgentActions.ts`:
+
+```typescript
+import phoneOwnershipMatches from "../../helpers/PhoneOwnership";
+```
+
+Em `handleBuscarBoletoAction`, substituir o início da função (antes de `const boleto = await SgpService.buscarBoleto(cpfCnpj);`) por:
+
+```typescript
+export const handleBuscarBoletoAction = async (
+  cpfCnpj: string,
+  ticket: Ticket,
+  contact: Contact,
+  wbot: WASocket,
+  companyId: number
+): Promise<void> => {
+  const cliente = await SgpService.consultarCliente(cpfCnpj);
+
+  if (!cliente) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody("Não localizei seu cadastro pelo CPF/CNPJ informado.", contact)
+    });
+    return;
+  }
+
+  if (!phoneOwnershipMatches(contact.number, cliente.telefones)) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        "Por segurança, não consegui confirmar que este WhatsApp pertence ao titular desse CPF/CNPJ. Vou te encaminhar para um atendente.",
+        contact
+      )
+    });
+    await transferToQueueByName("Atendimento", ticket, companyId);
+    return;
+  }
+
+  const boleto = await SgpService.buscarBoleto(cpfCnpj);
+  // ... resto da função permanece igual
+```
+
+Em `handleLiberarConfiancaAction`, adicionar a mesma checagem logo depois do bloco `if (!cliente) {...}` já existente, antes da chamada a `SgpService.liberarConfianca`:
+
+```typescript
+  if (!phoneOwnershipMatches(contact.number, cliente.telefones)) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        "Por segurança, não consegui confirmar que este WhatsApp pertence ao titular desse CPF/CNPJ. Vou te encaminhar para um atendente.",
+        contact
+      )
+    });
+    await transferToQueueByName("Atendimento", ticket, companyId);
+    return;
+  }
+```
+
+- [ ] **Step 12: Rodar os testes e confirmar que passam**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/WbotServices/__tests__/AiAgentActions.spec.ts --coverage=false
+```
+
+Expected: `PASS`, todos os testes do arquivo (os existentes ajustados + os 2 novos).
+
+- [ ] **Step 13: Rodar a suíte completa e compilar**
+
+```bash
+cd /home/edison/fontes/stonechat/backend
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest --coverage=false
+```
+
+Expected: TypeScript compila sem erro, todos os testes `PASS`.
+
+- [ ] **Step 14: Commit**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/services/WbotServices/AiAgentActions.ts backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts
+git commit -m "Verifica propriedade do CPF por telefone cadastrado antes de entregar boleto ou liberar confiança"
+```
