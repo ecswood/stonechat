@@ -271,4 +271,19 @@ describe("dispatchAiAction", () => {
 
     expect(result).toBe("Como posso te ajudar hoje?");
   });
+
+  it("remove a frase-gatilho de Buscar Boleto mesmo sem CPF conhecido, sem chamar o SGP", async () => {
+    const contactSemCpf = { number: "554388515951", cpfCnpj: undefined } as any;
+
+    const result = await dispatchAiAction(
+      "Antes preciso do seu CPF. Ação: Buscar Boleto",
+      ticket,
+      contactSemCpf,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Antes preciso do seu CPF.");
+    expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
+  });
 });

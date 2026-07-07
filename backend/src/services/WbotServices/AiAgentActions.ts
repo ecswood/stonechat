@@ -164,14 +164,20 @@ export const dispatchAiAction = async (
     return responseText.replace(ACTION_MARKERS.transferirTecnico, "").trim();
   }
 
-  if (responseText.includes(ACTION_MARKERS.buscarBoleto) && cpfCnpj) {
-    await handleBuscarBoletoAction(cpfCnpj, ticket, contact, wbot, companyId);
-    return responseText.replace(ACTION_MARKERS.buscarBoleto, "").trim();
+  if (responseText.includes(ACTION_MARKERS.buscarBoleto)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.buscarBoleto, "").trim();
+    if (cpfCnpj) {
+      await handleBuscarBoletoAction(cpfCnpj, ticket, contact, wbot, companyId);
+    }
+    return cleaned;
   }
 
-  if (responseText.includes(ACTION_MARKERS.liberarConfianca) && cpfCnpj) {
-    await handleLiberarConfiancaAction(cpfCnpj, ticket, contact, wbot, companyId);
-    return responseText.replace(ACTION_MARKERS.liberarConfianca, "").trim();
+  if (responseText.includes(ACTION_MARKERS.liberarConfianca)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.liberarConfianca, "").trim();
+    if (cpfCnpj) {
+      await handleLiberarConfiancaAction(cpfCnpj, ticket, contact, wbot, companyId);
+    }
+    return cleaned;
   }
 
   return responseText;
