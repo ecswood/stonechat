@@ -17,18 +17,35 @@ const ACTION_MARKERS = {
   desvincularCpf: "Ação: Desvincular CPF"
 } as const;
 
+export const AI_ATTENDANCE_TAG_NAME = "Atendimento IA";
+
 export const registerAiAttendance = async (
   ticket: Ticket,
   companyId: number
 ): Promise<void> => {
   const [tag] = await Tag.findOrCreate({
-    where: { name: "Atendimento IA", companyId },
-    defaults: { name: "Atendimento IA", companyId, color: "#8B5CF6" }
+    where: { name: AI_ATTENDANCE_TAG_NAME, companyId },
+    defaults: { name: AI_ATTENDANCE_TAG_NAME, companyId, color: "#8B5CF6" }
   });
 
   await TicketTag.findOrCreate({
     where: { ticketId: ticket.id, tagId: tag.id }
   });
+};
+
+export const isAiHandledTicket = async (
+  ticketId: number,
+  companyId: number
+): Promise<boolean> => {
+  const tag = await Tag.findOne({
+    where: { name: AI_ATTENDANCE_TAG_NAME, companyId }
+  });
+  if (!tag) return false;
+
+  const ticketTag = await TicketTag.findOne({
+    where: { ticketId, tagId: tag.id }
+  });
+  return ticketTag !== null;
 };
 
 export const transferToQueueByName = async (
