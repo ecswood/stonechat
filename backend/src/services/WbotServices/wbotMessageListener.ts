@@ -762,41 +762,12 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       ticket.companyId
     );
 
-    const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-      text: response
-    });
-    await verifyMessage(sentMessage!, ticket, contact);
-
-    /*
-    if (prompt.voice === "texto") {
+    if (response.trim()) {
       const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-        text: response!
+        text: response
       });
       await verifyMessage(sentMessage!, ticket, contact);
-    } else {
-      const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
-      convertTextToSpeechAndSaveToFile(
-        keepOnlySpecifiedChars(response!),
-        `${publicFolder}/${fileNameWithOutExtension}`,
-        prompt.voiceKey,
-        prompt.voiceRegion,
-        prompt.voice,
-        "mp3"
-      ).then(async () => {
-        try {
-          const sendMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-            audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
-            mimetype: "audio/mpeg",
-            ptt: true
-          });
-          await verifyMediaMessage(sendMessage!, ticket, contact);
-          deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
-          deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.wav`);
-        } catch (error) {
-          console.log(`Erro para responder com audio: ${error}`);
-        }
-      });
-    }*/
+    }
   } else if (msg.message?.audioMessage) {
     const mediaUrl = mediaSent!.mediaUrl!.split("/").pop();
     const file = fs.createReadStream(`${publicFolder}/${mediaUrl}`) as any;
@@ -860,18 +831,6 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
     }
   }
   messagesOpenAi = [];
-};
-
-const transferQueue = async (
-  queueId: number,
-  ticket: Ticket,
-  contact: Contact
-): Promise<void> => {
-  await UpdateTicketService({
-    ticketData: { queueId: queueId, useIntegration: false, promptId: null },
-    ticketId: ticket.id,
-    companyId: ticket.companyId
-  });
 };
 
 const verifyMediaMessage = async (

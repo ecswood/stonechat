@@ -116,6 +116,27 @@ describe("handleBuscarBoletoAction", () => {
     });
   });
 
+  it("não inclui 'Linha digitável' nem a string 'null' quando linhaDigitavel é null", async () => {
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: null,
+      pixCopiaCola: "00020126...",
+      valor: "99.90",
+      vencimento: "2026-07-15"
+    });
+
+    await handleBuscarBoletoAction("12345678900", ticket, contact, wbot, 1);
+
+    expect(wbot.sendMessage).toHaveBeenCalled();
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    const boletoText = sentTexts.find(t => t.includes("https://sgp/boleto/1"));
+    expect(boletoText).toBeDefined();
+    expect(boletoText).not.toContain("null");
+    expect(boletoText).not.toContain("Linha digitável");
+  });
+
   it("avisa o cliente quando não há boleto em aberto, sem fechar o ticket", async () => {
     (SgpService.buscarBoleto as jest.Mock).mockResolvedValue(null);
 

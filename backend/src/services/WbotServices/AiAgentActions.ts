@@ -66,9 +66,13 @@ export const handleBuscarBoletoAction = async (
     return;
   }
 
+  const linhaDigitavelTexto = boleto.linhaDigitavel
+    ? `\n*Linha digitável:* ${boleto.linhaDigitavel}`
+    : "";
+
   await wbot.sendMessage(jidOf(contact), {
     text: formatBody(
-      `Segue sua fatura:\n\n*Valor:* R$ ${boleto.valor}\n*Vencimento:* ${boleto.vencimento}\n*Link do boleto:* ${boleto.linkBoleto}\n*Linha digitável:* ${boleto.linhaDigitavel}`,
+      `Segue sua fatura:\n\n*Valor:* R$ ${boleto.valor}\n*Vencimento:* ${boleto.vencimento}\n*Link do boleto:* ${boleto.linkBoleto}${linhaDigitavelTexto}`,
       contact
     )
   });
