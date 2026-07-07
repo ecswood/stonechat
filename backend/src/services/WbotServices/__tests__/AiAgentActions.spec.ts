@@ -171,6 +171,15 @@ describe("handleBuscarBoletoAction", () => {
       companyId: 1
     });
   });
+
+  it("não busca boleto quando o cliente não é encontrado no SGP", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue(null);
+
+    await handleBuscarBoletoAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
+    expect(wbot.sendMessage).toHaveBeenCalled();
+  });
 });
 
 describe("handleLiberarConfiancaAction", () => {

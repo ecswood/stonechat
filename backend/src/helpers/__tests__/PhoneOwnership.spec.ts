@@ -31,4 +31,16 @@ describe("phoneOwnershipMatches", () => {
 
     expect(result).toBe(false);
   });
+
+  it("retorna false quando o número de WhatsApp normaliza pra menos de 8 dígitos", () => {
+    const result = phoneOwnershipMatches("123", ["(43) 98851-5951"]);
+
+    expect(result).toBe(false);
+  });
+
+  it("retorna false mesmo se um telefone cadastrado também normalizar pra string vazia", () => {
+    const result = phoneOwnershipMatches("", ["N/A", ""]);
+
+    expect(result).toBe(false);
+  });
 });

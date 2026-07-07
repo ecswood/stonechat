@@ -9,6 +9,7 @@ const phoneOwnershipMatches = (
   sgpTelefones: string[]
 ): boolean => {
   const waDigits = last8Digits(waNumber);
+  if (waDigits.length < 8) return false;
   return sgpTelefones.some(tel => last8Digits(tel) === waDigits);
 };
 
