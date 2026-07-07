@@ -1038,6 +1038,7 @@ ${JSON.stringify(msg?.message)}`);
   } catch (error) {
     Sentry.setExtra("Error isValidMsg", { msg });
     Sentry.captureException(error);
+    logger.error(`isValidMsg -> error: ${error}`);
   }
 };
 

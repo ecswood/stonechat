@@ -286,6 +286,7 @@ async function handleSendScheduledMessage(job) {
     sendScheduledMessages.clean(15000, "completed");
   } catch (e: any) {
     Sentry.captureException(e);
+    logger.error(`handleSendScheduledMessage -> error: ${e.message}`);
     await scheduleRecord?.update({
       status: "ERRO"
     });
@@ -332,6 +333,7 @@ async function handleVerifyCampaigns(job) {
       );
     } catch (err: any) {
       Sentry.captureException(err);
+      logger.error(`handleVerifyCampaigns -> error: ${err.message}`);
     }
   }
 
@@ -569,6 +571,7 @@ async function handleProcessCampaign(job) {
     }
   } catch (err: any) {
     Sentry.captureException(err);
+    logger.error(`handleProcessCampaign -> error: ${err.message}`);
   }
 }
 
@@ -754,6 +757,7 @@ async function handleLoginStatus(job) {
       logger.info(`Usuário passado para offline: ${item.id}`);
     } catch (e: any) {
       Sentry.captureException(e);
+      logger.error(`handleLoginStatus -> error: ${e.message}`);
     }
   }
 }

@@ -1,6 +1,7 @@
 import ListWhatsAppsService from "../WhatsappService/ListWhatsAppsService";
 import { StartWhatsAppSession } from "./StartWhatsAppSession";
 import * as Sentry from "@sentry/node";
+import { logger } from "../../utils/logger";
 
 export const StartAllWhatsAppsSessions = async (
   companyId: number
@@ -14,5 +15,6 @@ export const StartAllWhatsAppsSessions = async (
     }
   } catch (e) {
     Sentry.captureException(e);
+    logger.error(`StartAllWhatsAppsSessions -> error: ${e}`);
   }
 };
