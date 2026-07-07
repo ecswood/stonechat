@@ -34,6 +34,9 @@ class Contact extends Model<Contact> {
   @Column
   number: string;
 
+  @Column
+  cpfCnpj: string;
+
   @AllowNull(false)
   @Default("")
   @Column
