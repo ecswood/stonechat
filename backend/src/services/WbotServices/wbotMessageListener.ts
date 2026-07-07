@@ -48,6 +48,7 @@ import { cacheLayer } from "../../libs/cache";
 import { provider } from "./providers";
 import { debounce } from "../../helpers/Debounce";
 import resolveContactNumber from "../../helpers/ResolveContactNumber";
+import synthesizeSpeech from "../../helpers/OpenAiTextToSpeech";
 import { ChatCompletionRequestMessage, Configuration, OpenAIApi } from "openai";
 import ffmpeg from "fluent-ffmpeg";
 import {
@@ -823,43 +824,39 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       max_tokens: prompt.maxTokens,
       temperature: prompt.temperature
     });
-    let response = chat.data.choices[0].message?.content;
+    let response = chat.data.choices[0].message?.content ?? "";
 
-    if (response?.includes("Ação: Transferir para o setor de atendimento")) {
-      await transferQueue(prompt.queueId, ticket, contact);
-      response = response
-        .replace("Ação: Transferir para o setor de atendimento", "")
-        .trim();
-    }
-    /*if (prompt.voice === "texto") {
+    await registerAiAttendance(ticket, ticket.companyId);
+
+    response = await dispatchAiAction(
+      response,
+      ticket,
+      contact,
+      wbot,
+      ticket.companyId
+    );
+
+    const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
+    try {
+      const audioBuffer = await synthesizeSpeech(response, prompt.apiKey);
+      fs.writeFileSync(
+        `${publicFolder}/${fileNameWithOutExtension}.mp3`,
+        audioBuffer
+      );
       const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-        text: response!
+        audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
+        mimetype: "audio/mpeg",
+        ptt: true
+      });
+      await verifyMediaMessage(sentMessage!, ticket, contact);
+      deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
+    } catch (error) {
+      logger.error(`Erro ao responder com áudio: ${error}`);
+      const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+        text: response
       });
       await verifyMessage(sentMessage!, ticket, contact);
-    } else {
-      const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
-      convertTextToSpeechAndSaveToFile(
-        keepOnlySpecifiedChars(response!),
-        `${publicFolder}/${fileNameWithOutExtension}`,
-        prompt.voiceKey,
-        prompt.voiceRegion,
-        prompt.voice,
-        "mp3"
-      ).then(async () => {
-        try {
-          const sendMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-            audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
-            mimetype: "audio/mpeg",
-            ptt: true
-          });
-          await verifyMediaMessage(sendMessage!, ticket, contact);
-          deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
-          deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.wav`);
-        } catch (error) {
-          console.log(`Erro para responder com audio: ${error}`);
-        }
-      });
-    }*/
+    }
   }
   messagesOpenAi = [];
 };
