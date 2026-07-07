@@ -70,7 +70,7 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
 
   SetTicketMessagesAsRead(ticket);
 
-  if (medias) {
+  if (medias && medias.length > 0) {
     await Promise.all(
       medias.map(async (media: Express.Multer.File, index) => {
         await SendWhatsAppMedia({ media, ticket, body: Array.isArray(body) ? body[index] : body });
@@ -140,7 +140,7 @@ export const send = async (req: Request, res: Response): Promise<Response> => {
 
     const ticket = await FindOrCreateTicketService(contact, whatsapp.id!, 0, companyId);
 
-    if (medias) {
+    if (medias && medias.length > 0) {
       await Promise.all(
         medias.map(async (media: Express.Multer.File) => {
           await req.app.get("queues").messageQueue.add(
