@@ -58,6 +58,7 @@ import {
 import typebotListener from "../TypebotServices/typebotListener";
 import QueueIntegrations from "../../models/QueueIntegrations";
 import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIntegrationService";
+import { registerAiAttendance, dispatchAiAction } from "./AiAgentActions";
 
 const request = require("request");
 
@@ -651,6 +652,16 @@ const handleOpenAi = async (
 ): Promise<void> => {
   const bodyMessage = getBodyMessage(msg);
 
+  if (!contact.cpfCnpj && bodyMessage) {
+    const possivelCpfCnpj = bodyMessage.replace(/\D/g, "");
+    if (
+      (possivelCpfCnpj.length === 11 || possivelCpfCnpj.length === 14) &&
+      validaCpfCnpj(possivelCpfCnpj)
+    ) {
+      await contact.update({ cpfCnpj: possivelCpfCnpj });
+    }
+  }
+
   if (!bodyMessage) return;
 
   let { prompt } = await ShowWhatsAppService(wbot.id, ticket.companyId);
@@ -693,11 +704,22 @@ const handleOpenAi = async (
     limit: maxMessages
   });
 
+  const cpfContexto = contact.cpfCnpj
+    ? `O CPF/CNPJ deste cliente já é conhecido: ${contact.cpfCnpj}. Não peça de novo.`
+    : "O CPF/CNPJ deste cliente ainda não é conhecido. Antes de buscar boleto ou fazer liberação de confiança, peça o CPF/CNPJ dele.";
+
   const promptSystem = `Nas respostas utilize o nome ${sanitizeName(
     contact.name || "Amigo(a)"
   )} para identificar o cliente.\nSua resposta deve usar no máximo ${
     prompt.maxTokens
-  } tokens e cuide para não truncar o final.\nSempre que possível, mencione o nome dele para ser mais personalizado o atendimento e mais educado. Quando a resposta requer uma transferência para o setor de atendimento, comece sua resposta com 'Ação: Transferir para o setor de atendimento'.\n
+  } tokens e cuide para não truncar o final.\nSempre que possível, mencione o nome dele para ser mais personalizado o atendimento e mais educado.\n${cpfContexto}\nO protocolo deste atendimento é #${
+    ticket.id
+  } — informe ao cliente na saudação inicial e ao encerrar o atendimento.\n
+Quando o cliente quiser falar com um atendente humano, termine sua resposta com a frase exata 'Ação: Transferir para Atendimento'.
+Quando o cliente relatar um problema técnico (sem conexão, lentidão, equipamento com defeito), termine sua resposta com a frase exata 'Ação: Transferir para Técnico'.
+Quando o cliente pedir boleto, 2ª via, fatura ou PIX, e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Buscar Boleto'.
+Quando o cliente pedir para liberar/religar a conexão por confiança (mesmo estando em débito), e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Liberar Confiança'.
+Nunca invente valores de boleto, datas ou resultados de liberação — o sistema é quem confirma isso ao cliente depois da sua resposta.\n
   ${prompt.prompt}\n`;
 
   let messagesOpenAi: ChatCompletionRequestMessage[] = [];
@@ -727,17 +749,20 @@ const handleOpenAi = async (
       temperature: prompt.temperature
     });
 
-    let response = chat.data.choices[0].message?.content;
+    let response = chat.data.choices[0].message?.content ?? "";
 
-    if (response?.includes("Ação: Transferir para o setor de atendimento")) {
-      await transferQueue(prompt.queueId, ticket, contact);
-      response = response
-        .replace("Ação: Transferir para o setor de atendimento", "")
-        .trim();
-    }
+    await registerAiAttendance(ticket, ticket.companyId);
+
+    response = await dispatchAiAction(
+      response,
+      ticket,
+      contact,
+      wbot,
+      ticket.companyId
+    );
 
     const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-      text: response!
+      text: response
     });
     await verifyMessage(sentMessage!, ticket, contact);
 
