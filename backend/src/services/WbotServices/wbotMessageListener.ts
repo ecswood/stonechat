@@ -849,13 +849,14 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
         ptt: true
       });
       await verifyMediaMessage(sentMessage!, ticket, contact);
-      deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
     } catch (error) {
       logger.error(`Erro ao responder com áudio: ${error}`);
       const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
         text: response
       });
       await verifyMessage(sentMessage!, ticket, contact);
+    } finally {
+      deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
     }
   }
   messagesOpenAi = [];
