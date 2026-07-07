@@ -47,6 +47,7 @@ import Setting from "../../models/Setting";
 import { cacheLayer } from "../../libs/cache";
 import { provider } from "./providers";
 import { debounce } from "../../helpers/Debounce";
+import resolveContactNumber from "../../helpers/ResolveContactNumber";
 import { ChatCompletionRequestMessage, Configuration, OpenAIApi } from "openai";
 import ffmpeg from "fluent-ffmpeg";
 import {
@@ -80,6 +81,7 @@ interface ImessageUpsert {
 interface IMe {
   name: string;
   id: string;
+  senderPn?: string;
 }
 
 interface IMessage {
@@ -464,7 +466,11 @@ const getContactMessage = async (msg: proto.IWebMessageInfo, wbot: Session) => {
       }
     : {
         id: msg.key.remoteJid,
-        name: msg.key.fromMe ? rawNumber : msg.pushName
+        name: msg.key.fromMe ? rawNumber : msg.pushName,
+        // senderPn isn't in the protobuf-generated IMessageKey type, but
+        // Baileys attaches it at runtime (see decode-wa-message.js) whenever
+        // the message is routed via the contact's @lid identity.
+        senderPn: (msg.key as { senderPn?: string }).senderPn
       };
 };
 
@@ -522,9 +528,13 @@ const verifyContact = async (
     profilePicUrl = `${process.env.FRONTEND_URL}/nopicture.png`;
   }
 
+  const number = msgContact.id.includes("g.us")
+    ? msgContact.id.replace(/\D/g, "")
+    : resolveContactNumber(msgContact.id, msgContact.senderPn);
+
   const contactData = {
-    name: msgContact?.name || msgContact.id.replace(/\D/g, ""),
-    number: msgContact.id.replace(/\D/g, ""),
+    name: msgContact?.name || number,
+    number,
     profilePicUrl,
     isGroup: msgContact.id.includes("g.us"),
     companyId,
