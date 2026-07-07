@@ -3,6 +3,10 @@ import TicketTag from "../../models/TicketTag";
 import Ticket from "../../models/Ticket";
 import Queue from "../../models/Queue";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
+import Contact from "../../models/Contact";
+import SgpService from "../SgpServices/SgpService";
+import { WASocket } from "@whiskeysockets/baileys";
+import formatBody from "../../helpers/Mustache";
 
 export const registerAiAttendance = async (
   ticket: Ticket,
@@ -32,4 +36,45 @@ export const transferToQueueByName = async (
     companyId
   });
   return true;
+};
+
+const jidOf = (contact: Contact): string => `${contact.number}@s.whatsapp.net`;
+
+export const handleBuscarBoletoAction = async (
+  cpfCnpj: string,
+  ticket: Ticket,
+  contact: Contact,
+  wbot: WASocket,
+  companyId: number
+): Promise<void> => {
+  const boleto = await SgpService.buscarBoleto(cpfCnpj);
+
+  if (!boleto) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        "Não encontrei nenhuma fatura em aberto no seu CPF/CNPJ no momento.",
+        contact
+      )
+    });
+    return;
+  }
+
+  await wbot.sendMessage(jidOf(contact), {
+    text: formatBody(
+      `Segue sua fatura:\n\n*Valor:* R$ ${boleto.valor}\n*Vencimento:* ${boleto.vencimento}\n*Link do boleto:* ${boleto.linkBoleto}\n*Linha digitável:* ${boleto.linhaDigitavel}`,
+      contact
+    )
+  });
+
+  if (boleto.pixCopiaCola) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(`*PIX Copia e Cola:*\n${boleto.pixCopiaCola}`, contact)
+    });
+  }
+
+  await UpdateTicketService({
+    ticketData: { status: "closed" },
+    ticketId: ticket.id,
+    companyId
+  });
 };

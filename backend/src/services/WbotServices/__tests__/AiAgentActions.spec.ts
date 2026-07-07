@@ -14,6 +14,10 @@ jest.mock("../../TicketServices/UpdateTicketService", () => ({
   __esModule: true,
   default: jest.fn()
 }));
+jest.mock("../../SgpServices/SgpService", () => ({
+  __esModule: true,
+  default: { buscarBoleto: jest.fn() }
+}));
 
 // eslint-disable-next-line import/first
 import Tag from "../../../models/Tag";
@@ -24,7 +28,9 @@ import Queue from "../../../models/Queue";
 // eslint-disable-next-line import/first
 import UpdateTicketService from "../../TicketServices/UpdateTicketService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName } from "../AiAgentActions";
+import SgpService from "../../SgpServices/SgpService";
+// eslint-disable-next-line import/first
+import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction } from "../AiAgentActions";
 
 describe("registerAiAttendance", () => {
   it("cria a tag 'Atendimento IA' se não existir e aplica ao ticket", async () => {
@@ -71,6 +77,47 @@ describe("transferToQueueByName", () => {
     );
 
     expect(result).toBe(false);
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
+});
+
+describe("handleBuscarBoletoAction", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const ticket = { id: 22, companyId: 1, contact: { number: "554388515951" } } as any;
+  const contact = { number: "554388515951" } as any;
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("envia o boleto e fecha o ticket quando encontrado", async () => {
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: "00190...",
+      pixCopiaCola: "00020126...",
+      valor: "99.90",
+      vencimento: "2026-07-15"
+    });
+
+    await handleBuscarBoletoAction("12345678900", ticket, contact, wbot, 1);
+
+    expect(wbot.sendMessage).toHaveBeenCalled();
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
+    expect(sentTexts.some(t => t.includes("00020126"))).toBe(true);
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { status: "closed" },
+      ticketId: 22,
+      companyId: 1
+    });
+  });
+
+  it("avisa o cliente quando não há boleto em aberto, sem fechar o ticket", async () => {
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue(null);
+
+    await handleBuscarBoletoAction("12345678900", ticket, contact, wbot, 1);
+
+    expect(wbot.sendMessage).toHaveBeenCalled();
     expect(UpdateTicketService).not.toHaveBeenCalled();
   });
 });
