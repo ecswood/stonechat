@@ -8,6 +8,14 @@ export interface SgpCliente {
   contratoId: number;
 }
 
+export interface SgpBoleto {
+  linkBoleto: string;
+  linhaDigitavel: string | null;
+  pixCopiaCola: string | null;
+  valor: string;
+  vencimento: string;
+}
+
 const sgpUrl = (): string => process.env.SGP_URL || "";
 const sgpToken = (): string => process.env.SGP_TOKEN || "";
 
@@ -37,4 +45,28 @@ const consultarCliente = async (
   }
 };
 
-export default { consultarCliente };
+const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
+  try {
+    const response = await axios.post(`${sgpUrl()}/api/ura/titulos/`, {
+      token: sgpToken(),
+      app: "StoneChat",
+      cpfcnpj: cpfCnpj
+    });
+
+    const titulos = response.data?.titulos ?? [];
+    const aberto = titulos.find((t: { status: string }) => t.status === "aberto");
+    if (!aberto) return null;
+
+    return {
+      linkBoleto: aberto.link ?? "",
+      linhaDigitavel: aberto.linhaDigitavel || null,
+      pixCopiaCola: aberto.codigoPix || null,
+      valor: String(aberto.valorCorrigido ?? ""),
+      vencimento: aberto.dataVencimento ?? ""
+    };
+  } catch {
+    return null;
+  }
+};
+
+export default { consultarCliente, buscarBoleto };
