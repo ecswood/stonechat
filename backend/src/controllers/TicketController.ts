@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import { getIO } from "../libs/socket";
 import Ticket from "../models/Ticket";
+import AppError from "../errors/AppError";
 
 import CreateTicketService from "../services/TicketServices/CreateTicketService";
 import DeleteTicketService from "../services/TicketServices/DeleteTicketService";
@@ -187,12 +188,18 @@ export const update = async (
   const ticketData: TicketData = req.body;
   const { companyId, id} = req.user;
 
-  const { ticket } = await UpdateTicketService({
+  const result = await UpdateTicketService({
     ticketData,
     ticketId,
     companyId,
     actionUserId: id
   });
+
+  if (!result) {
+    throw new AppError("ERR_UPDATING_TICKET", 500);
+  }
+
+  const { ticket } = result;
 
 
   return res.status(200).json(ticket);

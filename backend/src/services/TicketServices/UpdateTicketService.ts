@@ -1,5 +1,6 @@
 import moment from "moment";
 import * as Sentry from "@sentry/node";
+import { logger } from "../../utils/logger";
 import CheckContactOpenTickets from "../../helpers/CheckContactOpenTickets";
 import SetTicketMessagesAsRead from "../../helpers/SetTicketMessagesAsRead";
 import { getIO } from "../../libs/socket";
@@ -14,6 +15,7 @@ import GetTicketWbot from "../../helpers/GetTicketWbot";
 import { verifyMessage } from "../WbotServices/wbotMessageListener";
 import ListSettingsServiceOne from "../SettingServices/ListSettingsServiceOne"; //NOVO PLW DESIGN//
 import ShowUserService from "../UserServices/ShowUserService"; //NOVO PLW DESIGN//
+import resolveTicketWhatsappId from "../../helpers/ResolveTicketWhatsappId";
 import { isNil } from "lodash";
 import Whatsapp from "../../models/Whatsapp";
 import { Op } from "sequelize";
@@ -79,7 +81,7 @@ const UpdateTicketService = async ({
     });
 
     if (isNil(whatsappId)) {
-      whatsappId = ticket.whatsappId.toString();
+      whatsappId = resolveTicketWhatsappId(ticket);
     }
 
     await SetTicketMessagesAsRead(ticket);
@@ -319,6 +321,7 @@ const UpdateTicketService = async ({
     return { ticket, oldStatus, oldUserId };
   } catch (err) {
     Sentry.captureException(err);
+    logger.error(`[UpdateTicketService] ticketId=${ticketId} companyId=${companyId}: ${err}`);
   }
 };
 
