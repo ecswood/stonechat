@@ -1,10 +1,10 @@
 jest.mock("../../../models/Tag", () => ({
   __esModule: true,
-  default: { findOrCreate: jest.fn() }
+  default: { findOrCreate: jest.fn(), findOne: jest.fn() }
 }));
 jest.mock("../../../models/TicketTag", () => ({
   __esModule: true,
-  default: { findOrCreate: jest.fn() }
+  default: { findOrCreate: jest.fn(), findOne: jest.fn() }
 }));
 jest.mock("../../../models/Queue", () => ({
   __esModule: true,
@@ -34,7 +34,7 @@ import UpdateTicketService from "../../TicketServices/UpdateTicketService";
 // eslint-disable-next-line import/first
 import SgpService from "../../SgpServices/SgpService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, dispatchAiAction } from "../AiAgentActions";
+import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, dispatchAiAction, isAiHandledTicket } from "../AiAgentActions";
 
 describe("registerAiAttendance", () => {
   it("cria a tag 'Atendimento IA' se não existir e aplica ao ticket", async () => {
@@ -50,6 +50,37 @@ describe("registerAiAttendance", () => {
     expect(TicketTag.findOrCreate).toHaveBeenCalledWith({
       where: { ticketId: 22, tagId: 5 }
     });
+  });
+});
+
+describe("isAiHandledTicket", () => {
+  it("retorna true quando o ticket tem a tag Atendimento IA", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue({ id: 5 });
+    (TicketTag.findOne as jest.Mock) = jest.fn().mockResolvedValue({ id: 1 });
+
+    const result = await isAiHandledTicket(22, 1);
+
+    expect(result).toBe(true);
+    expect(Tag.findOne).toHaveBeenCalledWith({
+      where: { name: "Atendimento IA", companyId: 1 }
+    });
+  });
+
+  it("retorna false quando a tag não existe pra essa empresa", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue(null);
+
+    const result = await isAiHandledTicket(22, 1);
+
+    expect(result).toBe(false);
+  });
+
+  it("retorna false quando a tag existe mas não está aplicada nesse ticket", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue({ id: 5 });
+    (TicketTag.findOne as jest.Mock) = jest.fn().mockResolvedValue(null);
+
+    const result = await isAiHandledTicket(22, 1);
+
+    expect(result).toBe(false);
   });
 });
 
@@ -112,6 +143,9 @@ describe("handleBuscarBoletoAction", () => {
     );
     expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
     expect(sentTexts.some(t => t.includes("00020126"))).toBe(true);
+    expect(
+      sentTexts.some(t => t.includes("Protocolo:") && t.includes("#22"))
+    ).toBe(true);
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
       ticketId: 22,
