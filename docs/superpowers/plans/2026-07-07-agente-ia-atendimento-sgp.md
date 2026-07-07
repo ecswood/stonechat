@@ -21,6 +21,7 @@
   - `Ação: Transferir para Técnico`
   - `Ação: Buscar Boleto`
   - `Ação: Liberar Confiança`
+  - `Ação: Desvincular CPF` (Task 16)
 
 ---
 
@@ -2219,4 +2220,166 @@ Expected: TypeScript compila sem erro, todos os testes `PASS`.
 cd /home/edison/fontes/stonechat
 git add backend/src/services/WbotServices/AiAgentActions.ts backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts
 git commit -m "Verifica propriedade do CPF por telefone cadastrado antes de entregar boleto ou liberar confiança"
+```
+
+---
+
+### Task 16: Comando para desvincular o CPF do WhatsApp
+
+**Contexto (pedido pelo Edison, complementar à Task 15):** com a verificação de propriedade por telefone (Task 15), pode acontecer de um WhatsApp ficar "preso" a um CPF errado (ex: cadastro digitado errado da primeira vez, celular repassado pra outra pessoa, número compartilhado em família). O cliente precisa de um jeito de resetar isso sem depender de um atendente humano mexer no banco.
+
+**Design:** 5ª ação, mesmo mecanismo de frase-gatilho das outras 4. Diferente de "Buscar Boleto"/"Liberar Confiança", não depende do CPF já ser conhecido nem verifica telefone no SGP — só limpa o `cpfCnpj` já salvo *deste próprio contato* (`Contact.cpfCnpj`, Task 1), que é exatamente o vínculo local que a IA usa pra não perguntar CPF de novo. Isso não mexe em nada do lado do SGP nem afeta outro cliente — o cliente só está resetando a própria conversa, então não precisa da checagem de propriedade da Task 15 aqui.
+
+**Files:**
+- Modify: `backend/src/services/WbotServices/AiAgentActions.ts` — nova função `handleDesvincularCpfAction` + novo marcador em `dispatchAiAction`
+- Modify: `backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts`
+- Modify: `backend/src/services/WbotServices/wbotMessageListener.ts` — nova instrução no `promptSystem` (mesmo bloco que a Task 10 já criou)
+
+**Interfaces:**
+- Produces: `handleDesvincularCpfAction(contact: Contact, wbot: WASocket): Promise<void>` — chamado por `dispatchAiAction`.
+
+**Nova frase-gatilho** (adicionar à lista de Global Constraints do topo do plano): `Ação: Desvincular CPF`
+
+- [ ] **Step 1: Escrever o teste de `handleDesvincularCpfAction`**
+
+Adicionar em `AiAgentActions.spec.ts`:
+
+```typescript
+describe("handleDesvincularCpfAction", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("limpa o cpfCnpj do contato e avisa o cliente", async () => {
+    const contact = {
+      number: "554388515951",
+      cpfCnpj: "68197756953",
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await handleDesvincularCpfAction(contact, wbot);
+
+    expect(contact.update).toHaveBeenCalledWith({ cpfCnpj: null });
+    expect(wbot.sendMessage).toHaveBeenCalled();
+  });
+});
+```
+
+- [ ] **Step 2: Rodar o teste e confirmar que falha**
+
+```bash
+cd /home/edison/fontes/stonechat/backend
+docker build --target builder -t stonechat-test-builder .
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/WbotServices/__tests__/AiAgentActions.spec.ts --coverage=false
+```
+
+Expected: FAIL — `handleDesvincularCpfAction is not a function`.
+
+- [ ] **Step 3: Implementar a função**
+
+Adicionar em `AiAgentActions.ts`:
+
+```typescript
+export const handleDesvincularCpfAction = async (
+  contact: Contact,
+  wbot: WASocket
+): Promise<void> => {
+  await contact.update({ cpfCnpj: null });
+  await wbot.sendMessage(jidOf(contact), {
+    text: formatBody(
+      "Pronto, desvinculei o CPF/CNPJ anterior deste WhatsApp. Pode me informar o novo CPF/CNPJ pra eu continuar te ajudando.",
+      contact
+    )
+  });
+};
+```
+
+- [ ] **Step 4: Rodar o teste e confirmar que passa**
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/WbotServices/__tests__/AiAgentActions.spec.ts --coverage=false
+```
+
+Expected: `PASS`.
+
+- [ ] **Step 5: Escrever o teste de `dispatchAiAction` pra essa nova ação**
+
+Adicionar em `describe("dispatchAiAction", ...)`:
+
+```typescript
+it("remove a frase-gatilho e desvincula o CPF", async () => {
+  const contactComCpf = {
+    number: "554388515951",
+    cpfCnpj: "68197756953",
+    update: jest.fn().mockResolvedValue(undefined)
+  } as any;
+
+  const result = await dispatchAiAction(
+    "Sem problemas, já vou desvincular. Ação: Desvincular CPF",
+    ticket,
+    contactComCpf,
+    wbot,
+    1
+  );
+
+  expect(result).toBe("Sem problemas, já vou desvincular.");
+  expect(contactComCpf.update).toHaveBeenCalledWith({ cpfCnpj: null });
+});
+```
+
+- [ ] **Step 6: Rodar o teste e confirmar que falha, depois adicionar o marcador em `dispatchAiAction` e confirmar que passa**
+
+Em `ACTION_MARKERS`, adicionar:
+
+```typescript
+  desvincularCpf: "Ação: Desvincular CPF"
+```
+
+E em `dispatchAiAction`, adicionar (não precisa checar `cpfCnpj`, ao contrário dos branches de boleto/liberação):
+
+```typescript
+  if (responseText.includes(ACTION_MARKERS.desvincularCpf)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.desvincularCpf, "").trim();
+    await handleDesvincularCpfAction(contact, wbot);
+    return cleaned;
+  }
+```
+
+```bash
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/WbotServices/__tests__/AiAgentActions.spec.ts --coverage=false
+```
+
+Expected: `PASS`, todos os testes do arquivo.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/services/WbotServices/AiAgentActions.ts backend/src/services/WbotServices/__tests__/AiAgentActions.spec.ts
+git commit -m "Adiciona ação de desvincular CPF ao AiAgentActions"
+```
+
+- [ ] **Step 8: Atualizar o `promptSystem` em `wbotMessageListener.ts` com a 5ª instrução**
+
+No mesmo bloco que a Task 10 já criou (`const promptSystem = ...`), adicionar mais uma linha de instrução, junto às outras 4 (`Ação: Transferir para Atendimento`, etc):
+
+```
+Quando o cliente disser que esse não é o CPF/CNPJ dele, quiser trocar o CPF cadastrado, ou pedir pra desvincular o número, termine sua resposta com a frase exata 'Ação: Desvincular CPF'.
+```
+
+- [ ] **Step 9: Compilar e rodar a suíte completa**
+
+```bash
+cd /home/edison/fontes/stonechat/backend
+docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest --coverage=false
+```
+
+Expected: TypeScript compila sem erro, todos os testes `PASS`.
+
+- [ ] **Step 10: Commit**
+
+```bash
+cd /home/edison/fontes/stonechat
+git add backend/src/services/WbotServices/wbotMessageListener.ts
+git commit -m "Adiciona instrução de desvincular CPF ao promptSystem do agente de IA"
 ```
