@@ -492,65 +492,120 @@ git commit -m "Adiciona busca de boleto/PIX ao SgpService"
 - Modify: `backend/src/services/SgpServices/__tests__/SgpService.spec.ts`
 
 **Interfaces:**
-- Consumes: `SgpCliente.contratoId` (Task 2) — a liberação é feita por contrato, não por CPF direto.
-- Produces: `SgpLiberacaoResultado` (union type), `sgpService.liberarConfianca(contratoId: number): Promise<SgpLiberacaoResultado>` — usado pela Task 8.
+- Consumes: `SgpCliente.contratoId`, `SgpCliente.cpfCnpj` (Task 2) + um novo campo `SgpCliente.centralSenha` que esta própria task adiciona (ver Step 1).
+- Produces: `SgpLiberacaoResultado` (union type), `sgpService.liberarConfianca(cpfCnpj: string, senhaCentral: string, contratoId: number): Promise<SgpLiberacaoResultado>` — usado pela Task 8.
 
-- [ ] **Step 1: Verificar o endpoint real contra o SGP**
+- [ ] **Step 1: Endpoint, autenticação e OS TRÊS CASOS DE RESPOSTA — todos confirmados ao vivo, nada é mais suposição**
 
-O nome exato deste endpoint **não foi localizado** — nem na pesquisa pública, nem testando ao vivo. Nesta sessão já foram testados (com o token do SNILog, `app: "snilog"`, contra `https://snitelecom.sgp.net.br/api/ura/<nome>/`) os candidatos `liberacaoconfianca`, `desbloqueioconfianca`, `religaconfianca`, `liberarconfianca` e `confianca` — **todos retornaram 404**. Diferente de `consultacliente`/`fatura2via`/`titulos` (que existem e respondem 200 mesmo pra CPF inexistente), nenhuma variação óbvia de nome funcionou — não adianta tentar mais nomes por tentativa.
-
-Antes de codar, **fale com o suporte do SGP diretamente** (ou acesse `https://bookstack.sgp.net.br` com login de administrador do SGP, que não está disponível publicamente) e pergunte especificamente pelo endpoint de "liberação/religação de confiança" da API URA. Com o path real em mãos, teste:
+**Descoberta importante:** este endpoint NÃO usa o padrão `token`+`app` no body como `consultarCliente`/`buscarBoleto`. Ele fica sob um namespace diferente da API do SGP (`/api/central/`, não `/api/ura/`) e usa **CPF/CNPJ + senha do "Central do Assinante"** — a senha de portal do próprio cliente, que o SGP já devolve no campo `contratoCentralSenha` da resposta de `consultacliente` (por isso o Step 2 abaixo estende `SgpCliente`/`consultarCliente` da Task 2 para capturar esse campo).
 
 ```bash
-curl -s -X POST "https://snitelecom.sgp.net.br/api/ura/<endpoint confirmado pelo suporte>/" \
+curl -s -X POST "https://snitelecom.sgp.net.br/api/central/promessapagamento/" \
   -H "Content-Type: application/json" \
-  -d '{"token":"'"$SGP_TOKEN"'","app":"StoneChat","cpfcnpj":"<CPF de teste>","contrato":<id de contrato de teste, já bloqueado>}' | python3 -m json.tool
+  -d '{"cpfcnpj":"68197756953","senha":"09cz5dle","contrato":1879}'
 ```
 
-**Registre o endpoint e o formato de resposta reais encontrados como comentário no topo da função `liberarConfianca` antes de finalizar esta task** — é informação que a próxima pessoa vai precisar.
+Testado ao vivo em produção contra um contrato real, nos três estados possíveis (chamado 3 vezes: sem bloqueio, com bloqueio ativo pela primeira vez, e de novo logo em seguida). **O campo `status` é o discriminador real e confiável — use-o, não regex em `msg`:**
 
-Ao testar, provoque também o caso de recusa (contrato que já usou liberação e não pagou) para confirmar como o SGP sinaliza essa condição na resposta (mensagem de erro específica, campo de status, etc) — é o que o Step 4 abaixo precisa distinguir.
+1. **`status: 0`** — contrato sem bloqueio ativo (nada a liberar):
+   ```json
+   {"status":0,"razaosocial":"EDISON CARLOS DOS SANTOS","liberado":false,"cpfcnpj":"681.977.569-53","contrato":1879,"msg":""}
+   ```
+2. **`status: 1`** — liberação concedida com sucesso (primeira vez, contrato estava bloqueado):
+   ```json
+   {"status":1,"razaosocial":"EDISON CARLOS DOS SANTOS","protocolo":"260707144900","liberado":true,"data_promessa":"2026-07-08","cpfcnpj":"681.977.569-53","contrato":1879,"msg":"Liberação via Central App -\n   Serviço ID: 1876, Login: edisonsni\n   Motivo: Promessa de Pagamento\n   "}
+   ```
+   Note os campos extras só presentes no sucesso: `protocolo` (protocolo da liberação, gerado pelo próprio SGP) e `data_promessa` (o SGP decide a data automaticamente — não precisamos/não enviamos essa data no request).
+3. **`status: 2`** — já usou o recurso recentemente, não pode liberar de novo (**esta é a condição "já utilizou e não cumpriu" que o Edison descreveu** — texto real, bem diferente do que se supunha antes):
+   ```json
+   {"status":2,"razaosocial":"EDISON CARLOS DOS SANTOS","liberado":false,"cpfcnpj":"681.977.569-53","contrato":1879,"msg":"O recurso de promessa de pagamento já atingiu quantidade permitida. Recurso não disponível"}
+   ```
 
-- [ ] **Step 2: Escrever o teste (ajustar após a verificação do Step 1 se o formato real divergir)**
+Falha de autenticação (senha errada ou ausente) confirmada: HTTP 403, `{"detail":"As credenciais de autenticação não foram fornecidas."}`.
+
+Use `status === 1` (ou equivalentemente `liberado === true`) para sucesso, e `status === 2` para o caso "já utilizado" — não precisa de regex em `msg`, é só texto informativo pro log/mensagem ao cliente.
+
+- [ ] **Step 2: Estender `SgpCliente`/`consultarCliente` (Task 2) com o campo `centralSenha`**
+
+Em `SgpService.ts`, adicionar `centralSenha: string;` à interface `SgpCliente` (depois de `contratoId`), e `centralSenha: c.contratoCentralSenha ?? ""` ao mapeamento em `consultarCliente`. Atualizar também o teste de sucesso já existente em `SgpService.spec.ts` (`describe("SgpService.consultarCliente")`, teste `"retorna os dados do cliente..."`) — adicionar `contratoCentralSenha: "09cz5dle"` aos dados mockados de `contratos[0]` e `centralSenha: "09cz5dle"` ao objeto esperado em `toEqual`.
+
+- [ ] **Step 3: Escrever o teste de `liberarConfianca` — os 3 casos reais + falha de rede**
 
 ```typescript
 describe("SgpService.liberarConfianca", () => {
-  beforeEach(() => {
-    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
-    process.env.SGP_TOKEN = "token-teste";
-  });
-
-  it("retorna sucesso quando a liberação é concedida", async () => {
-    (axios.post as jest.Mock).mockResolvedValue({
-      data: { tipo: "sucesso", mensagem: "Liberação realizada com sucesso" }
-    });
-
-    const result = await SgpService.liberarConfianca(99);
-
-    expect(result).toEqual({ sucesso: true });
-  });
-
-  it("retorna motivo 'ja_utilizado' quando o cliente já usou e não cumpriu", async () => {
+  it("retorna sucesso com protocolo e data da promessa quando liberado (status 1, caso real)", async () => {
     (axios.post as jest.Mock).mockResolvedValue({
       data: {
-        tipo: "erro",
-        mensagem: "Cliente já utilizou liberação de confiança e não regularizou o débito"
+        status: 1,
+        razaosocial: "EDISON CARLOS DOS SANTOS",
+        protocolo: "260707144900",
+        liberado: true,
+        data_promessa: "2026-07-08",
+        cpfcnpj: "681.977.569-53",
+        contrato: 1879,
+        msg: "Liberação via Central App -\n   Serviço ID: 1876, Login: edisonsni\n   Motivo: Promessa de Pagamento\n   "
       }
     });
 
-    const result = await SgpService.liberarConfianca(99);
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
+
+    expect(result).toEqual({
+      sucesso: true,
+      protocolo: "260707144900",
+      dataPromessa: "2026-07-08"
+    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/central/promessapagamento/",
+      { cpfcnpj: "68197756953", senha: "09cz5dle", contrato: 1879 }
+    );
+  });
+
+  it("retorna motivo 'ja_utilizado' quando status é 2 (caso real: limite atingido)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        status: 2,
+        razaosocial: "EDISON CARLOS DOS SANTOS",
+        liberado: false,
+        cpfcnpj: "681.977.569-53",
+        contrato: 1879,
+        msg: "O recurso de promessa de pagamento já atingiu quantidade permitida. Recurso não disponível"
+      }
+    });
+
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
 
     expect(result).toEqual({
       sucesso: false,
       motivo: "ja_utilizado",
-      mensagem: "Cliente já utilizou liberação de confiança e não regularizou o débito"
+      mensagem: "O recurso de promessa de pagamento já atingiu quantidade permitida. Recurso não disponível"
     });
   });
 
-  it("retorna motivo 'erro' pra qualquer outra falha", async () => {
+  it("retorna motivo 'erro' quando status é 0 (caso real: sem bloqueio ativo, nada a liberar)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        status: 0,
+        razaosocial: "EDISON CARLOS DOS SANTOS",
+        liberado: false,
+        cpfcnpj: "681.977.569-53",
+        contrato: 1879,
+        msg: ""
+      }
+    });
+
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
+
+    expect(result).toEqual({
+      sucesso: false,
+      motivo: "erro",
+      mensagem: "Não foi possível processar a liberação no momento"
+    });
+  });
+
+  it("retorna motivo 'erro' pra falha de rede/timeout", async () => {
     (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
 
-    const result = await SgpService.liberarConfianca(99);
+    const result = await SgpService.liberarConfianca("68197756953", "09cz5dle", 1879);
 
     expect(result).toEqual({
       sucesso: false,
@@ -561,44 +616,64 @@ describe("SgpService.liberarConfianca", () => {
 });
 ```
 
-- [ ] **Step 3: Rodar o teste e confirmar que falha**
+- [ ] **Step 4: Rodar os testes e confirmar que falham**
 
 ```bash
+docker build --target builder -t stonechat-test-builder .
 docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/SgpServices/__tests__/SgpService.spec.ts --coverage=false
 ```
 
-Expected: FAIL — `SgpService.liberarConfianca is not a function`.
+Expected: FAIL — `SgpService.liberarConfianca is not a function` (e o teste de `consultarCliente` atualizado no Step 2 falha até a interface ser estendida).
 
-- [ ] **Step 4: Implementar**
+- [ ] **Step 5: Implementar**
 
-Adicionar em `SgpService.ts`:
+Adicionar `centralSenha` à interface `SgpCliente` e ao mapeamento em `consultarCliente` (Step 2), e adicionar em `SgpService.ts`:
 
 ```typescript
 export type SgpLiberacaoResultado =
-  | { sucesso: true }
+  | { sucesso: true; protocolo: string; dataPromessa: string }
   | { sucesso: false; motivo: "ja_utilizado" | "erro"; mensagem: string };
 
-// Endpoint confirmado em <preencher com o resultado real do Step 1>.
+// Endpoint real: POST /api/central/promessapagamento/ (confirmado ao vivo em produção,
+// nos 3 estados possíveis, contra um contrato real). Autenticação DIFERENTE dos outros
+// métodos deste arquivo: não usa token/app, usa cpfCnpj + senha do Central do Assinante
+// (SgpCliente.centralSenha). `status` é o discriminador confiável da resposta:
+//   0 = sem bloqueio ativo, nada a liberar
+//   1 = liberado com sucesso (só aqui vêm `protocolo` e `data_promessa`, a data é decidida
+//       pelo próprio SGP, não enviamos data no request)
+//   2 = já usou o recurso recentemente ("O recurso de promessa de pagamento já atingiu
+//       quantidade permitida") — é o caso "já utilizou e não cumpriu" descrito pelo Edison
 const liberarConfianca = async (
+  cpfCnpj: string,
+  senhaCentral: string,
   contratoId: number
 ): Promise<SgpLiberacaoResultado> => {
   try {
     const response = await axios.post(
-      `${sgpUrl()}/api/ura/liberacaoconfianca/`,
-      { token: sgpToken(), app: "StoneChat", contrato: contratoId }
+      `${sgpUrl()}/api/central/promessapagamento/`,
+      { cpfcnpj: cpfCnpj, senha: senhaCentral, contrato: contratoId }
     );
 
-    if (response.data?.tipo === "sucesso") {
-      return { sucesso: true };
+    if (response.data?.status === 1) {
+      return {
+        sucesso: true,
+        protocolo: response.data?.protocolo ?? "",
+        dataPromessa: response.data?.data_promessa ?? ""
+      };
     }
 
-    const mensagem: string = response.data?.mensagem ?? "";
-    const jaUtilizou = /já utilizou|não regulariz/i.test(mensagem);
+    if (response.data?.status === 2) {
+      return {
+        sucesso: false,
+        motivo: "ja_utilizado",
+        mensagem: response.data?.msg ?? "Você já utilizou esse recurso recentemente."
+      };
+    }
 
     return {
       sucesso: false,
-      motivo: jaUtilizou ? "ja_utilizado" : "erro",
-      mensagem: mensagem || "Não foi possível processar a liberação no momento"
+      motivo: "erro",
+      mensagem: "Não foi possível processar a liberação no momento"
     };
   } catch {
     return {
@@ -612,20 +687,20 @@ const liberarConfianca = async (
 export default { consultarCliente, buscarBoleto, liberarConfianca };
 ```
 
-- [ ] **Step 5: Rodar o teste e confirmar que passa**
+- [ ] **Step 6: Rodar os testes e confirmar que passam**
 
 ```bash
 docker run --rm -e NODE_ENV=test stonechat-test-builder npx jest src/services/SgpServices/__tests__/SgpService.spec.ts --coverage=false
 ```
 
-Expected: `PASS`, 8 testes passando.
+Expected: `PASS`, 10 testes passando (3 consultarCliente + 3 buscarBoleto + 4 liberarConfianca).
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 cd /home/edison/fontes/stonechat
 git add backend/src/services/SgpServices/SgpService.ts backend/src/services/SgpServices/__tests__/SgpService.spec.ts
-git commit -m "Adiciona liberação de confiança ao SgpService"
+git commit -m "Adiciona liberação de confiança ao SgpService (via /api/central/promessapagamento/)"
 ```
 
 ---
@@ -1036,15 +1111,22 @@ describe("handleLiberarConfiancaAction", () => {
 
   it("libera e fecha o ticket quando bem-sucedido", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
-      contratoId: 99
+      contratoId: 1879,
+      centralSenha: "09cz5dle"
     });
     (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
-      sucesso: true
+      sucesso: true,
+      protocolo: "260707144900",
+      dataPromessa: "2026-07-08"
     });
 
-    await handleLiberarConfiancaAction("12345678900", ticket, contact, wbot, 1);
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
 
-    expect(SgpService.liberarConfianca).toHaveBeenCalledWith(99);
+    expect(SgpService.liberarConfianca).toHaveBeenCalledWith(
+      "68197756953",
+      "09cz5dle",
+      1879
+    );
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
       ticketId: 22,
@@ -1052,18 +1134,19 @@ describe("handleLiberarConfiancaAction", () => {
     });
   });
 
-  it("avisa o cliente e transfere para Financeiro quando já usou e não cumpriu", async () => {
+  it("avisa o cliente e transfere para Financeiro quando já usou e não cumpriu (status 2 real)", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
-      contratoId: 99
+      contratoId: 1879,
+      centralSenha: "09cz5dle"
     });
     (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
       sucesso: false,
       motivo: "ja_utilizado",
-      mensagem: "Cliente já utilizou liberação de confiança e não regularizou"
+      mensagem: "O recurso de promessa de pagamento já atingiu quantidade permitida. Recurso não disponível"
     });
     (Queue.findOne as jest.Mock).mockResolvedValue({ id: 3 });
 
-    await handleLiberarConfiancaAction("12345678900", ticket, contact, wbot, 1);
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
 
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { queueId: 3, useIntegration: false, promptId: null },
@@ -1075,7 +1158,7 @@ describe("handleLiberarConfiancaAction", () => {
   it("não libera quando o cliente não é encontrado no SGP", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue(null);
 
-    await handleLiberarConfiancaAction("12345678900", ticket, contact, wbot, 1);
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
 
     expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
     expect(wbot.sendMessage).toHaveBeenCalled();
@@ -1113,12 +1196,16 @@ export const handleLiberarConfiancaAction = async (
     return;
   }
 
-  const resultado = await SgpService.liberarConfianca(cliente.contratoId);
+  const resultado = await SgpService.liberarConfianca(
+    cpfCnpj,
+    cliente.centralSenha,
+    cliente.contratoId
+  );
 
   if (resultado.sucesso) {
     await wbot.sendMessage(jidOf(contact), {
       text: formatBody(
-        "Pronto! Liberei sua conexão por confiança. Aguarde alguns minutos e verifique se voltou a funcionar.",
+        `Pronto! Liberei sua conexão por confiança até *${resultado.dataPromessa}*. Aguarde alguns minutos e verifique se voltou a funcionar.\n\n*Protocolo:* ${resultado.protocolo}`,
         contact
       )
     });
@@ -1133,7 +1220,7 @@ export const handleLiberarConfiancaAction = async (
   if (resultado.motivo === "ja_utilizado") {
     await wbot.sendMessage(jidOf(contact), {
       text: formatBody(
-        "Você já utilizou a liberação por confiança anteriormente e o acordo não foi cumprido, então não posso liberar automaticamente dessa vez. Vou te encaminhar para o setor financeiro.",
+        "Você já utilizou a liberação por confiança recentemente, então não posso liberar automaticamente dessa vez. Vou te encaminhar para o setor financeiro.",
         contact
       )
     });
