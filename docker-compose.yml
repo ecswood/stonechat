@@ -54,6 +54,8 @@ services:
       - GERENCIANET_CLIENT_SECRET=
       - GERENCIANET_PIX_CERT=
       - GERENCIANET_PIX_KEY=
+      - SGP_URL=${SGP_URL:-https://snitelecom.sgp.net.br}
+      - SGP_TOKEN=${SGP_TOKEN:-}
       - MAIL_HOST=smtp.gmail.com
       - MAIL_USER=
       - MAIL_PASS=
