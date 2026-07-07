@@ -13,7 +13,8 @@ const ACTION_MARKERS = {
   transferirAtendimento: "Ação: Transferir para Atendimento",
   transferirTecnico: "Ação: Transferir para Técnico",
   buscarBoleto: "Ação: Buscar Boleto",
-  liberarConfianca: "Ação: Liberar Confiança"
+  liberarConfianca: "Ação: Liberar Confiança",
+  desvincularCpf: "Ação: Desvincular CPF"
 } as const;
 
 export const registerAiAttendance = async (
@@ -181,6 +182,19 @@ export const handleLiberarConfiancaAction = async (
   await transferToQueueByName("Atendimento", ticket, companyId);
 };
 
+export const handleDesvincularCpfAction = async (
+  contact: Contact,
+  wbot: WASocket
+): Promise<void> => {
+  await contact.update({ cpfCnpj: null });
+  await wbot.sendMessage(jidOf(contact), {
+    text: formatBody(
+      "Pronto, desvinculei o CPF/CNPJ anterior deste WhatsApp. Pode me informar o novo CPF/CNPJ pra eu continuar te ajudando.",
+      contact
+    )
+  });
+};
+
 export const dispatchAiAction = async (
   responseText: string,
   ticket: Ticket,
@@ -213,6 +227,12 @@ export const dispatchAiAction = async (
     if (cpfCnpj) {
       await handleLiberarConfiancaAction(cpfCnpj, ticket, contact, wbot, companyId);
     }
+    return cleaned;
+  }
+
+  if (responseText.includes(ACTION_MARKERS.desvincularCpf)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.desvincularCpf, "").trim();
+    await handleDesvincularCpfAction(contact, wbot);
     return cleaned;
   }
 

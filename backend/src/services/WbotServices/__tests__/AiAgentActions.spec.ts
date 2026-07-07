@@ -34,7 +34,7 @@ import UpdateTicketService from "../../TicketServices/UpdateTicketService";
 // eslint-disable-next-line import/first
 import SgpService from "../../SgpServices/SgpService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, dispatchAiAction } from "../AiAgentActions";
+import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, dispatchAiAction } from "../AiAgentActions";
 
 describe("registerAiAttendance", () => {
   it("cria a tag 'Atendimento IA' se não existir e aplica ao ticket", async () => {
@@ -265,6 +265,25 @@ describe("handleLiberarConfiancaAction", () => {
   });
 });
 
+describe("handleDesvincularCpfAction", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+
+  beforeEach(() => jest.clearAllMocks());
+
+  it("limpa o cpfCnpj do contato e avisa o cliente", async () => {
+    const contact = {
+      number: "554388515951",
+      cpfCnpj: "68197756953",
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await handleDesvincularCpfAction(contact, wbot);
+
+    expect(contact.update).toHaveBeenCalledWith({ cpfCnpj: null });
+    expect(wbot.sendMessage).toHaveBeenCalled();
+  });
+});
+
 describe("dispatchAiAction", () => {
   const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
   const ticket = { id: 22, companyId: 1 } as any;
@@ -379,5 +398,24 @@ describe("dispatchAiAction", () => {
 
     expect(result).toBe("Vou verificar sua condição.");
     expect(SgpService.consultarCliente).not.toHaveBeenCalled();
+  });
+
+  it("remove a frase-gatilho e desvincula o CPF", async () => {
+    const contactComCpf = {
+      number: "554388515951",
+      cpfCnpj: "68197756953",
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    const result = await dispatchAiAction(
+      "Sem problemas, já vou desvincular. Ação: Desvincular CPF",
+      ticket,
+      contactComCpf,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Sem problemas, já vou desvincular.");
+    expect(contactComCpf.update).toHaveBeenCalledWith({ cpfCnpj: null });
   });
 });
