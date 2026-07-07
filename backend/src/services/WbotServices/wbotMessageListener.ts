@@ -1854,7 +1854,14 @@ const handleMessage = async (
 
     try {
       if (!msg.key.fromMe) {
-        const isAiHandled = await isAiHandledTicket(ticket.id, companyId);
+        const canBeRatingReply =
+          ticketTraking !== null &&
+          ticketTraking.finishedAt === null &&
+          ticketTraking.ratingAt !== null;
+
+        const isAiHandled = canBeRatingReply
+          ? await isAiHandledTicket(ticket.id, companyId)
+          : false;
 
         if (ticketTraking !== null && verifyRating(ticketTraking, isAiHandled)) {
           handleRating(parseFloat(bodyMessage), ticket, ticketTraking);
