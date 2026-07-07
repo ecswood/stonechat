@@ -21,8 +21,7 @@ describe("SgpService.consultarCliente", () => {
             cpfCnpj: "12345678900",
             contratoStatusDisplay: "Ativo",
             clienteId: 42,
-            contratoId: 99,
-            bloqueado: false
+            contratoId: 99
           }
         ]
       }
@@ -35,8 +34,7 @@ describe("SgpService.consultarCliente", () => {
       cpfCnpj: "12345678900",
       contratoStatus: "Ativo",
       clienteId: 42,
-      contratoId: 99,
-      bloqueado: false
+      contratoId: 99
     });
     expect(axios.post).toHaveBeenCalledWith(
       "https://snitelecom.sgp.net.br/api/ura/consultacliente/",
