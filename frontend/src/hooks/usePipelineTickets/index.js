@@ -47,7 +47,6 @@ const usePipelineTickets = () => {
     });
 
     return () => {
-      socket.emit("leaveTicketsPipeline");
       socket.disconnect();
     };
   }, [socketManager, fetchPipeline]);
