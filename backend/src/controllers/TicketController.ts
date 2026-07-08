@@ -11,6 +11,7 @@ import ShowTicketService from "../services/TicketServices/ShowTicketService";
 import UpdateTicketService from "../services/TicketServices/UpdateTicketService";
 import ListTicketsServiceKanban from "../services/TicketServices/ListTicketsServiceKanban";
 import PullTicketService from "../services/TicketServices/PullTicketService";
+import ListTicketsServicePipeline from "../services/TicketServices/ListTicketsServicePipeline";
 
 type IndexQuery = {
   searchParam: string;
@@ -160,6 +161,27 @@ export const kanban = async (req: Request, res: Response): Promise<Response> => 
   });
 
   return res.status(200).json({ tickets, count, hasMore });
+};
+
+export const pipeline = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { companyId, profile } = req.user;
+  const { queueIds: queueIdsStringified } = req.query as { queueIds?: string };
+
+  let queueIds: number[] = [];
+  if (queueIdsStringified) {
+    queueIds = JSON.parse(queueIdsStringified);
+  }
+
+  const pipelineTickets = await ListTicketsServicePipeline({
+    companyId,
+    profile,
+    queueIds
+  });
+
+  return res.status(200).json(pipelineTickets);
 };
 
 export const show = async (req: Request, res: Response): Promise<Response> => {
