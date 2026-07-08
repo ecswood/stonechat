@@ -193,6 +193,17 @@ const messages = {
         open: "Em aberto",
         seeTicket: "Ver Ticket",
       },
+      ticketsPipeline: {
+        ia: "IA",
+        aguardando: "Aguardando",
+        atendendo: "Atendendo",
+        pull: "Puxar atendimento",
+        aiTag: "Atendimento IA",
+        seeTicket: "Ver Ticket",
+      },
+      linkedContacts: {
+        banner: "Este CPF também está associado a: ",
+      },
       invoices: {
         title: "Faturas",
         paid: "Pago",
