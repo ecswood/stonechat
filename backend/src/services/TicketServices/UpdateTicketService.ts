@@ -137,6 +137,7 @@ const UpdateTicketService = async ({
           io.to(`company-${ticket.companyId}-open`)
             .to(`queue-${ticket.queueId}-open`)
             .to(ticketId.toString())
+            .to(`company-${ticket.companyId}-pipeline`)
             .emit(`company-${ticket.companyId}-ticket`, {
               action: "delete",
               ticketId: ticket.id
