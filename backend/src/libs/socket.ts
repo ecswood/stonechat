@@ -163,7 +163,21 @@ export const initIO = (httpServer: Server): SocketIO => {
         }
       }
     });
-    
+
+    socket.on("joinTicketsPipeline", () => {
+      if (counters.incrementCounter("pipeline") === 1) {
+        logger.debug(`User ${user.id} of company ${user.companyId} joined pipeline channel.`);
+        socket.join(`company-${user.companyId}-pipeline`);
+      }
+    });
+
+    socket.on("leaveTicketsPipeline", () => {
+      if (counters.decrementCounter("pipeline") === 0) {
+        logger.debug(`User ${user.id} of company ${user.companyId} leaved pipeline channel.`);
+        socket.leave(`company-${user.companyId}-pipeline`);
+      }
+    });
+
     socket.emit("ready");
   });
   return io;

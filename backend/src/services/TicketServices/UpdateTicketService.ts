@@ -300,6 +300,7 @@ const UpdateTicketService = async ({
       io.to(`company-${companyId}-${oldStatus}`)
         .to(`queue-${ticket.queueId}-${oldStatus}`)
         .to(`user-${oldUserId}`)
+        .to(`company-${companyId}-pipeline`)
         .emit(`company-${companyId}-ticket`, {
           action: "delete",
           ticketId: ticket.id
@@ -313,6 +314,7 @@ const UpdateTicketService = async ({
       .to(ticketId.toString())
       .to(`user-${ticket?.userId}`)
       .to(`user-${oldUserId}`)
+      .to(`company-${companyId}-pipeline`)
       .emit(`company-${companyId}-ticket`, {
         action: "update",
         ticket

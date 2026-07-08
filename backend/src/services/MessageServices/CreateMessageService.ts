@@ -64,6 +64,7 @@ const CreateMessageService = async ({
     .to(`company-${companyId}-notification`)
     .to(`queue-${message.ticket.queueId}-${message.ticket.status}`)
     .to(`queue-${message.ticket.queueId}-notification`)
+    .to(`company-${companyId}-pipeline`)
     .emit(`company-${companyId}-appMessage`, {
       action: "create",
       message,
