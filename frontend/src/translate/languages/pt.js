@@ -1620,6 +1620,8 @@ const messages = {
         ERR_NO_SETTING_FOUND: "Nenhuma configuração encontrada com este ID.",
         ERR_NO_CONTACT_FOUND: "Nenhum contato encontrado com este ID.",
         ERR_NO_TICKET_FOUND: "Nenhum tíquete encontrado com este ID.",
+        ERR_TICKET_ALREADY_TAKEN:
+            "Esse atendimento já foi puxado por outro atendente.",
         ERR_NO_USER_FOUND: "Nenhum usuário encontrado com este ID.",
         ERR_NO_WAPP_FOUND: "Nenhum WhatsApp encontrado com este ID.",
         ERR_CREATING_MESSAGE: "Erro ao criar mensagem no banco de dados.",

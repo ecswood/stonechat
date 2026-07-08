@@ -10,6 +10,7 @@ import ShowTicketUUIDService from "../services/TicketServices/ShowTicketFromUUID
 import ShowTicketService from "../services/TicketServices/ShowTicketService";
 import UpdateTicketService from "../services/TicketServices/UpdateTicketService";
 import ListTicketsServiceKanban from "../services/TicketServices/ListTicketsServiceKanban";
+import PullTicketService from "../services/TicketServices/PullTicketService";
 
 type IndexQuery = {
   searchParam: string;
@@ -201,6 +202,22 @@ export const update = async (
 
   const { ticket } = result;
 
+
+  return res.status(200).json(ticket);
+};
+
+export const pull = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { ticketId } = req.params;
+  const { companyId, id } = req.user;
+
+  const ticket = await PullTicketService({
+    ticketId,
+    userId: Number(id),
+    companyId
+  });
 
   return res.status(200).json(ticket);
 };
