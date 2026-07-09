@@ -53,10 +53,10 @@ const TicketsCustom = () => {
 		<div className={classes.chatContainer}>
 			<div className={classes.chatPapper}>
 				<Grid container spacing={0}>
-					<Grid item xs={4} className={classes.contactsWrapper}>
+					<Grid item xs={5} className={classes.contactsWrapper}>
 						<TicketsManager />
 					</Grid>
-					<Grid item xs={8} className={classes.messagesWrapper}>
+					<Grid item xs={7} className={classes.messagesWrapper}>
 						{ticketId ? (
 							<>
 								<Ticket />

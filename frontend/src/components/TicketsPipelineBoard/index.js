@@ -11,26 +11,32 @@ const useStyles = makeStyles(() => ({
   root: {
     display: "flex",
     height: "100%",
+    overflowX: "auto",
   },
   pullButton: {
     background: "#10a110",
     border: "none",
-    padding: "8px",
+    padding: "6px",
     color: "white",
     fontWeight: "bold",
     borderRadius: "5px",
     cursor: "pointer",
-    marginTop: 6,
+    marginTop: 4,
+    fontSize: "0.75rem",
   },
   seeButton: {
-    marginTop: 6,
+    marginTop: 4,
     cursor: "pointer",
     background: "none",
     border: "1px solid #ccc",
     borderRadius: "5px",
-    padding: "6px",
+    padding: "5px",
+    fontSize: "0.75rem",
   },
 }));
+
+const laneStyle = { width: 220 };
+const cardStyle = { minWidth: 190, maxWidth: 210, fontSize: "0.8rem" };
 
 const buildCard = (ticket, classes, onOpen, onPull) => ({
   id: ticket.id.toString(),
@@ -38,8 +44,8 @@ const buildCard = (ticket, classes, onOpen, onPull) => ({
   label: `#${ticket.id}`,
   draggable: false,
   description: (
-    <div>
-      <p>
+    <div style={{ fontSize: "0.8rem" }}>
+      <p style={{ margin: "4px 0" }}>
         {ticket.contact?.number}
         <br />
         {ticket.lastMessage}
@@ -127,7 +133,12 @@ const TicketsPipelineBoard = () => {
 
   return (
     <div className={classes.root}>
-      <Board data={data} draggable={false} />
+      <Board
+        data={data}
+        draggable={false}
+        laneStyle={laneStyle}
+        cardStyle={cardStyle}
+      />
       <TicketMessagesDialog
         open={!!peekTicketId}
         ticketId={peekTicketId}
