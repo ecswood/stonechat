@@ -7,7 +7,7 @@ const synthesizeSpeech = async (
 ): Promise<Buffer> => {
   const response = await axios.post(
     "https://api.openai.com/v1/audio/speech",
-    { model: "tts-1", voice, input: text },
+    { model: "tts-1", voice, input: text, response_format: "opus" },
     {
       headers: { Authorization: `Bearer ${apiKey}` },
       responseType: "arraybuffer"

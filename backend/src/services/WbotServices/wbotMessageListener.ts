@@ -818,12 +818,12 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       try {
         const audioBuffer = await synthesizeSpeech(text, prompt.apiKey);
         fs.writeFileSync(
-          `${publicFolder}/${fileNameWithOutExtension}.mp3`,
+          `${publicFolder}/${fileNameWithOutExtension}.ogg`,
           audioBuffer
         );
         const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-          audio: { url: `${publicFolder}/${fileNameWithOutExtension}.mp3` },
-          mimetype: "audio/mpeg",
+          audio: { url: `${publicFolder}/${fileNameWithOutExtension}.ogg` },
+          mimetype: "audio/ogg; codecs=opus",
           ptt: true
         });
         await verifyMediaMessage(sentMessage!, ticket, contact);
@@ -834,7 +834,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
         });
         await verifyMessage(sentMessage!, ticket, contact);
       } finally {
-        deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
+        deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.ogg`);
       }
     };
 
