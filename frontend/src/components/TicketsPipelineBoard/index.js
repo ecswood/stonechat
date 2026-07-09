@@ -138,6 +138,10 @@ const TicketsPipelineBoard = () => {
         draggable={false}
         laneStyle={laneStyle}
         cardStyle={cardStyle}
+        style={{
+          backgroundColor: "rgba(252, 252, 252, 0.03)",
+          height: "100%",
+        }}
       />
       <TicketMessagesDialog
         open={!!peekTicketId}
