@@ -58,6 +58,7 @@ import QueueIntegrations from "../../models/QueueIntegrations";
 import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIntegrationService";
 import { registerAiAttendance, dispatchAiAction, isAiHandledTicket } from "./AiAgentActions";
 import { verifyRating, handleRating } from "./RatingHandler";
+import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 
 const request = require("request");
 
@@ -1677,10 +1678,23 @@ const handleMessage = async (
 
   if (!isValidMsg(msg)) return;
   try {
+    const isGroup = msg.key.remoteJid?.endsWith("@g.us");
+
+    if (!isGroup) {
+      const rawSenderNumber = msg.key.remoteJid?.replace(/\D/g, "");
+      const blockedNumbersSetting = await Setting.findOne({
+        where: { companyId, key: "blockedNumbers" }
+      });
+      if (
+        rawSenderNumber &&
+        IsBlockedNumber(rawSenderNumber, blockedNumbersSetting?.value)
+      ) {
+        return;
+      }
+    }
+
     let msgContact: IMe;
     let groupContact: Contact | undefined;
-
-    const isGroup = msg.key.remoteJid?.endsWith("@g.us");
 
     const msgIsGroupBlock = await Setting.findOne({
       where: {
