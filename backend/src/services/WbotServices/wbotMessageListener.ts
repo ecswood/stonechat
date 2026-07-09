@@ -760,7 +760,15 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       ticket,
       contact,
       wbot,
-      ticket.companyId
+      ticket.companyId,
+      async cleaned => {
+        if (cleaned.trim()) {
+          const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
+            text: cleaned
+          });
+          await verifyMessage(sentMessage!, ticket, contact);
+        }
+      }
     );
 
     if (response.trim()) {
@@ -800,18 +808,11 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
 
     await registerAiAttendance(ticket, ticket.companyId);
 
-    response = await dispatchAiAction(
-      response,
-      ticket,
-      contact,
-      wbot,
-      ticket.companyId
-    );
-
-    if (response.trim()) {
+    const sendAiAudioReply = async (text: string): Promise<void> => {
+      if (!text.trim()) return;
       const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
       try {
-        const audioBuffer = await synthesizeSpeech(response, prompt.apiKey);
+        const audioBuffer = await synthesizeSpeech(text, prompt.apiKey);
         fs.writeFileSync(
           `${publicFolder}/${fileNameWithOutExtension}.mp3`,
           audioBuffer
@@ -825,12 +826,25 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       } catch (error) {
         logger.error(`Erro ao responder com áudio: ${error}`);
         const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
-          text: response
+          text
         });
         await verifyMessage(sentMessage!, ticket, contact);
       } finally {
         deleteFileSync(`${publicFolder}/${fileNameWithOutExtension}.mp3`);
       }
+    };
+
+    response = await dispatchAiAction(
+      response,
+      ticket,
+      contact,
+      wbot,
+      ticket.companyId,
+      sendAiAudioReply
+    );
+
+    if (response.trim()) {
+      await sendAiAudioReply(response);
     }
   }
   messagesOpenAi = [];

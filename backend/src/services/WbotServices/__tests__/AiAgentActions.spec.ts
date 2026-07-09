@@ -359,6 +359,36 @@ describe("dispatchAiAction", () => {
     });
   });
 
+  it("chama onCleaned com a fala da IA ANTES de enviar as mensagens do boleto", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: "00190...",
+      pixCopiaCola: null,
+      valor: "99.90",
+      vencimento: "2026-07-15"
+    });
+    const onCleaned = jest.fn().mockResolvedValue(undefined);
+
+    const result = await dispatchAiAction(
+      "Um momento, vou buscar sua fatura. Ação: Buscar Boleto",
+      ticket,
+      contact,
+      wbot,
+      1,
+      onCleaned
+    );
+
+    expect(onCleaned).toHaveBeenCalledWith("Um momento, vou buscar sua fatura.");
+    expect(wbot.sendMessage).toHaveBeenCalled();
+    expect(onCleaned.mock.invocationCallOrder[0]).toBeLessThan(
+      (wbot.sendMessage as jest.Mock).mock.invocationCallOrder[0]
+    );
+    expect(result).toBe("");
+  });
+
   it("aciona a busca de boleto e remove a frase-gatilho", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       telefones: ["(43) 98851-5951"]

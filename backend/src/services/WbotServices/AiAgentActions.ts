@@ -224,40 +224,48 @@ export const dispatchAiAction = async (
   ticket: Ticket,
   contact: Contact,
   wbot: WASocket,
-  companyId: number
+  companyId: number,
+  onCleaned?: (cleaned: string) => Promise<void>
 ): Promise<string> => {
   const cpfCnpj = contact.cpfCnpj;
 
   if (responseText.includes(ACTION_MARKERS.transferirAtendimento)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.transferirAtendimento, "").trim();
+    if (onCleaned) await onCleaned(cleaned);
     await transferToQueueByName("Atendimento", ticket, companyId);
-    return responseText.replace(ACTION_MARKERS.transferirAtendimento, "").trim();
+    return onCleaned ? "" : cleaned;
   }
 
   if (responseText.includes(ACTION_MARKERS.transferirTecnico)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.transferirTecnico, "").trim();
+    if (onCleaned) await onCleaned(cleaned);
     await transferToQueueByName("Técnico", ticket, companyId);
-    return responseText.replace(ACTION_MARKERS.transferirTecnico, "").trim();
+    return onCleaned ? "" : cleaned;
   }
 
   if (responseText.includes(ACTION_MARKERS.buscarBoleto)) {
     const cleaned = responseText.replace(ACTION_MARKERS.buscarBoleto, "").trim();
+    if (onCleaned) await onCleaned(cleaned);
     if (cpfCnpj) {
       await handleBuscarBoletoAction(cpfCnpj, ticket, contact, wbot, companyId);
     }
-    return cleaned;
+    return onCleaned ? "" : cleaned;
   }
 
   if (responseText.includes(ACTION_MARKERS.liberarConfianca)) {
     const cleaned = responseText.replace(ACTION_MARKERS.liberarConfianca, "").trim();
+    if (onCleaned) await onCleaned(cleaned);
     if (cpfCnpj) {
       await handleLiberarConfiancaAction(cpfCnpj, ticket, contact, wbot, companyId);
     }
-    return cleaned;
+    return onCleaned ? "" : cleaned;
   }
 
   if (responseText.includes(ACTION_MARKERS.desvincularCpf)) {
     const cleaned = responseText.replace(ACTION_MARKERS.desvincularCpf, "").trim();
+    if (onCleaned) await onCleaned(cleaned);
     await handleDesvincularCpfAction(contact, wbot);
-    return cleaned;
+    return onCleaned ? "" : cleaned;
   }
 
   return responseText;
