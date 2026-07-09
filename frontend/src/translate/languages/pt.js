@@ -197,7 +197,7 @@ const messages = {
         ia: "IA",
         aguardando: "Aguardando",
         atendendo: "Atendendo",
-        pull: "Puxar atendimento",
+        pull: "Atender",
         aiTag: "Atendimento IA",
         seeTicket: "Ver Ticket",
       },
