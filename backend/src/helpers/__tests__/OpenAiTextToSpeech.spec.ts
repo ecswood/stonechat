@@ -17,7 +17,7 @@ describe("synthesizeSpeech", () => {
       "https://api.openai.com/v1/audio/speech",
       {
         model: "tts-1",
-        voice: "alloy",
+        voice: "nova",
         input: "Olá, tudo bem?",
         response_format: "opus"
       },

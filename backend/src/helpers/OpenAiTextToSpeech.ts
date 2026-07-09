@@ -3,7 +3,7 @@ import axios from "axios";
 const synthesizeSpeech = async (
   text: string,
   apiKey: string,
-  voice: string = "alloy"
+  voice: string = "nova"
 ): Promise<Buffer> => {
   const response = await axios.post(
     "https://api.openai.com/v1/audio/speech",
