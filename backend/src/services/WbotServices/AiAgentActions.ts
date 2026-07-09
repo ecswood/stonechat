@@ -9,6 +9,7 @@ import { WASocket } from "@whiskeysockets/baileys";
 import formatBody from "../../helpers/Mustache";
 import phoneOwnershipMatches from "../../helpers/PhoneOwnership";
 import FindOrCreateAiUserService from "../UserServices/FindOrCreateAiUserService";
+import closingFarewell from "../../helpers/ClosingFarewell";
 
 const ACTION_MARKERS = {
   transferirAtendimento: "Ação: Transferir para Atendimento",
@@ -114,7 +115,7 @@ export const handleBuscarBoletoAction = async (
 
   await wbot.sendMessage(jidOf(contact), {
     text: formatBody(
-      `Estamos finalizando este atendimento. *Protocolo:* #${ticket.id}\n\nQualquer coisa é só chamar!`,
+      `Estamos finalizando este atendimento. *Protocolo:* #${ticket.id}\n\nSNI Telecom agradece seu contato. ${closingFarewell(new Date().getHours())}`,
       contact
     )
   });
@@ -164,7 +165,7 @@ export const handleLiberarConfiancaAction = async (
   if (resultado.sucesso) {
     await wbot.sendMessage(jidOf(contact), {
       text: formatBody(
-        `Pronto! Liberei sua conexão por confiança até *${resultado.dataPromessa}*. Aguarde alguns minutos e verifique se voltou a funcionar.\n\n*Protocolo:* ${resultado.protocolo}`,
+        `Pronto! Liberei sua conexão por confiança até *${resultado.dataPromessa}*. Aguarde alguns minutos e verifique se voltou a funcionar.\n\n*Protocolo:* ${resultado.protocolo}\n\nSNI Telecom agradece seu contato. ${closingFarewell(new Date().getHours())}`,
         contact
       )
     });
@@ -210,7 +211,7 @@ export const handleDesvincularCpfAction = async (
   await contact.update({ cpfCnpj: null });
   await wbot.sendMessage(jidOf(contact), {
     text: formatBody(
-      `Pronto, este número foi desvinculado do CPF/CNPJ ${cpfAnterior} que estava cadastrado aqui. Obrigado pelo contato!`,
+      `Pronto, este número foi desvinculado do CPF/CNPJ ${cpfAnterior} que estava cadastrado aqui.\n\nSNI Telecom agradece seu contato. ${closingFarewell(new Date().getHours())}`,
       contact
     )
   });

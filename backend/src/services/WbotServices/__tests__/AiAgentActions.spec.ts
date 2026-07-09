@@ -42,6 +42,23 @@ import FindOrCreateAiUserService from "../../UserServices/FindOrCreateAiUserServ
 // eslint-disable-next-line import/first
 import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, dispatchAiAction, isAiHandledTicket } from "../AiAgentActions";
 
+const VALID_FAREWELLS = [
+  "Tenha uma boa madrugada!",
+  "Tenha um bom dia!",
+  "Tenha uma boa tarde!",
+  "Tenha uma boa noite!"
+];
+
+const expectClosingFarewell = (sentTexts: string[]): void => {
+  expect(
+    sentTexts.some(
+      t =>
+        t.includes("SNI Telecom agradece seu contato") &&
+        VALID_FAREWELLS.some(f => t.includes(f))
+    )
+  ).toBe(true);
+};
+
 describe("registerAiAttendance", () => {
   it("cria a tag 'Atendimento IA' se não existir e aplica ao ticket", async () => {
     (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 5 }, true]);
@@ -155,6 +172,7 @@ describe("handleBuscarBoletoAction", () => {
     expect(
       sentTexts.some(t => t.includes("Protocolo:") && t.includes("#22"))
     ).toBe(true);
+    expectClosingFarewell(sentTexts);
     expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
@@ -261,6 +279,10 @@ describe("handleLiberarConfiancaAction", () => {
       "09cz5dle",
       1879
     );
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expectClosingFarewell(sentTexts);
     expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
@@ -354,7 +376,7 @@ describe("handleDesvincularCpfAction", () => {
     const [{ text: sentText }] = wbot.sendMessage.mock.calls[0].slice(1);
     expect(sentText).toContain("68197756953");
     expect(sentText.toLowerCase()).toContain("desvincul");
-    expect(sentText.toLowerCase()).toContain("obrigad");
+    expectClosingFarewell([sentText]);
   });
 
   it("encerra o atendimento após desvincular, pra que um novo contato peça o CPF do titular de novo (pedido do Edison)", async () => {
