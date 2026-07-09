@@ -1681,7 +1681,10 @@ const handleMessage = async (
     const isGroup = msg.key.remoteJid?.endsWith("@g.us");
 
     if (!isGroup) {
-      const rawSenderNumber = msg.key.remoteJid?.replace(/\D/g, "");
+      const rawSenderNumber = resolveContactNumber(
+        msg.key.remoteJid,
+        (msg.key as { senderPn?: string }).senderPn
+      );
       const blockedNumbersSetting = await Setting.findOne({
         where: { companyId, key: "blockedNumbers" }
       });
