@@ -9,6 +9,7 @@ import GetTicketWbot from "../../helpers/GetTicketWbot";
 import Ticket from "../../models/Ticket";
 import { lookup } from "mime-types";
 import formatBody from "../../helpers/Mustache";
+import resolveAudioSendOptions from "../../helpers/AudioSendOptions";
 
 interface Request {
   media: Express.Multer.File;
@@ -135,21 +136,15 @@ const SendWhatsAppMedia = async ({
         // gifPlayback: true
       };
     } else if (typeMessage === "audio") {
-      const typeAudio = media.originalname.includes("audio-record-site");
-      if (typeAudio) {
-        const convert = await processAudio(media.path);
-        options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : media.mimetype,
-          ptt: true
-        };
-      } else {
-        const convert = await processAudioFile(media.path);
-        options = {
-          audio: fs.readFileSync(convert),
-          mimetype: typeAudio ? "audio/mp4" : media.mimetype
-        };
-      }
+      const { mimetype, ptt } = resolveAudioSendOptions(media.originalname);
+      const convert = ptt
+        ? await processAudio(media.path)
+        : await processAudioFile(media.path);
+      options = {
+        audio: fs.readFileSync(convert),
+        mimetype,
+        ptt
+      };
     } else if (typeMessage === "document" || typeMessage === "text") {
       options = {
         document: fs.readFileSync(pathMedia),
