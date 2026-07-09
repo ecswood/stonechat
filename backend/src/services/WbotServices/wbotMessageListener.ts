@@ -708,7 +708,8 @@ const handleOpenAi = async (
     ? `O CPF/CNPJ deste cliente já é conhecido: ${contact.cpfCnpj}. Não peça de novo.`
     : "O CPF/CNPJ deste cliente ainda não é conhecido. Antes de buscar boleto ou fazer liberação de confiança, peça o CPF/CNPJ dele.";
 
-  const promptSystem = `Nas respostas utilize o nome ${sanitizeName(
+  const promptSystem = `Seu nome é Clara, assistente virtual da SNI Telecom. Na saudação inicial do atendimento (a primeira mensagem da conversa), cumprimente de acordo com o horário (Bom dia/Boa tarde/Boa noite) e se apresente assim: "Bom dia! Aqui é a Clara, assistente virtual da SNI Telecom. Em que posso te ajudar hoje?" (troque só o cumprimento pelo horário certo). Nas mensagens seguintes da mesma conversa, não repita essa apresentação nem o cumprimento de novo — você já é a Clara, o cliente já sabe.\n
+Nas respostas utilize o nome ${sanitizeName(
     contact.name || "Amigo(a)"
   )} para identificar o cliente.\nSua resposta deve usar no máximo ${
     prompt.maxTokens
