@@ -201,20 +201,25 @@ describe("handleBuscarBoletoAction", () => {
     expect(UpdateTicketService).not.toHaveBeenCalled();
   });
 
-  it("recusa e transfere pra Atendimento quando o telefone não bate com o CPF informado", async () => {
+  it("envia o boleto mesmo quando o telefone não bate com nenhum dos cadastrados no CPF (baixo risco, decisão do Edison)", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       telefones: ["(11) 3333-4444"]
     });
-    (Queue.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: null,
+      pixCopiaCola: null,
+      valor: "50.00",
+      vencimento: "2026-07-20"
+    });
 
     await handleBuscarBoletoAction("68197756953", ticket, contact, wbot, 1);
 
-    expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
-    expect(UpdateTicketService).toHaveBeenCalledWith({
-      ticketData: { queueId: 1, useIntegration: false, promptId: null },
-      ticketId: 22,
-      companyId: 1
-    });
+    expect(SgpService.buscarBoleto).toHaveBeenCalledWith("68197756953");
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
   });
 
   it("não busca boleto quando o cliente não é encontrado no SGP", async () => {

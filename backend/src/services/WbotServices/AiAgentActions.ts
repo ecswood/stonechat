@@ -83,17 +83,6 @@ export const handleBuscarBoletoAction = async (
     return;
   }
 
-  if (!phoneOwnershipMatches(contact.number, cliente.telefones)) {
-    await wbot.sendMessage(jidOf(contact), {
-      text: formatBody(
-        "Por segurança, não consegui confirmar que este WhatsApp pertence ao titular desse CPF/CNPJ. Vou te encaminhar para um atendente.",
-        contact
-      )
-    });
-    await transferToQueueByName("Atendimento", ticket, companyId);
-    return;
-  }
-
   const boleto = await SgpService.buscarBoleto(cpfCnpj);
 
   if (!boleto) {
