@@ -379,6 +379,22 @@ describe("handleDesvincularCpfAction", () => {
     expectClosingFarewell([sentText]);
   });
 
+  it("avisa que não há CPF vinculado, sem dizer 'CPF/CNPJ null', quando o contato já está sem CPF (regressão real: duas execuções da mesma mensagem desvincularam duas vezes e a segunda mandou 'CPF/CNPJ null')", async () => {
+    const contact = {
+      number: "554388515951",
+      cpfCnpj: null,
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await handleDesvincularCpfAction(contact, wbot, ticket, 1);
+
+    expect(contact.update).not.toHaveBeenCalled();
+    const [{ text: sentText }] = wbot.sendMessage.mock.calls[0].slice(1);
+    expect(sentText.toLowerCase()).not.toContain("null");
+    expect(sentText.toLowerCase()).toContain("nenhum cpf");
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
+
   it("encerra o atendimento após desvincular, pra que um novo contato peça o CPF do titular de novo (pedido do Edison)", async () => {
     const contact = {
       number: "554388515951",

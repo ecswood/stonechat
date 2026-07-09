@@ -208,6 +208,17 @@ export const handleDesvincularCpfAction = async (
   companyId: number
 ): Promise<void> => {
   const cpfAnterior = contact.cpfCnpj;
+
+  if (!cpfAnterior) {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        "Não encontrei nenhum CPF/CNPJ vinculado a este número pra desvincular.",
+        contact
+      )
+    });
+    return;
+  }
+
   await contact.update({ cpfCnpj: null });
   await wbot.sendMessage(jidOf(contact), {
     text: formatBody(

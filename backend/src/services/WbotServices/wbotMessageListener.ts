@@ -60,6 +60,8 @@ import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIn
 import { registerAiAttendance, dispatchAiAction, isAiHandledTicket } from "./AiAgentActions";
 import { verifyRating, handleRating, parseValidRating } from "./RatingHandler";
 import IsBlockedNumber from "../../helpers/IsBlockedNumber";
+import shouldProcessMessage from "../../helpers/MessageDedup";
+import withConversationLock from "../../helpers/ConversationLock";
 
 const request = require("request");
 
@@ -722,7 +724,7 @@ Quando o cliente relatar um problema técnico (sem conexão, lentidão, equipame
 Quando o cliente pedir boleto, 2ª via, fatura ou PIX, e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Buscar Boleto'.
 Quando o cliente pedir para liberar/religar a conexão por confiança (mesmo estando em débito), e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Liberar Confiança'.
 Quando o cliente disser que esse não é o CPF/CNPJ dele, quiser trocar o CPF cadastrado, ou pedir pra desvincular o número, termine sua resposta com a frase exata 'Ação: Desvincular CPF'.
-Quando sua resposta terminar com uma dessas frases de Ação (Buscar Boleto, Liberar Confiança), o texto antes da frase de Ação deve ser curto: só avise que vai buscar/processar e peça pra aguardar um momento. Não cumprimente de novo (nada de "bom dia"/"boa noite") nem use o nome do cliente nessa mensagem — o cliente já foi cumprimentado na saudação inicial.
+Quando sua resposta terminar com uma dessas frases de Ação (Buscar Boleto, Liberar Confiança, Desvincular CPF), o texto antes da frase de Ação deve ser curto e falar exatamente sobre a ação que você vai tomar (buscar o boleto, processar a liberação, ou desvincular o CPF - nunca fale de uma ação diferente da que você está de fato acionando): só avise o que vai fazer e peça pra aguardar um momento. Não cumprimente de novo (nada de "bom dia"/"boa noite") nem use o nome do cliente nessa mensagem — o cliente já foi cumprimentado na saudação inicial.
 Nunca invente valores de boleto, datas ou resultados de liberação — o sistema é quem confirma isso ao cliente depois da sua resposta.\n
   ${prompt.prompt}\n`;
 
@@ -2257,6 +2259,8 @@ const wbotMessageListener = async (
   wbot: Session,
   companyId: number
 ): Promise<void> => {
+  const processedMessageIds = new Set<string>();
+
   try {
     wbot.ev.on("messages.upsert", async (messageUpsert: ImessageUpsert) => {
       const messages = messageUpsert.messages
@@ -2265,16 +2269,27 @@ const wbotMessageListener = async (
 
       if (!messages) return;
 
-      messages.forEach(async (message: proto.IWebMessageInfo) => {
-        const messageExists = await Message.count({
-          where: { id: message.key.id!, companyId }
-        });
-
-        if (!messageExists) {
-          await handleMessage(message, wbot, companyId);
-          await verifyRecentCampaign(message, companyId);
-          await verifyCampaignMessageAndCloseTicket(message, companyId);
+      messages.forEach((message: proto.IWebMessageInfo) => {
+        if (!shouldProcessMessage(processedMessageIds, message.key.id)) {
+          return;
         }
+
+        const lockKey = `${companyId}-${message.key.remoteJid}`;
+
+        withConversationLock(lockKey, async () => {
+          const messageExists = await Message.count({
+            where: { id: message.key.id!, companyId }
+          });
+
+          if (!messageExists) {
+            await handleMessage(message, wbot, companyId);
+            await verifyRecentCampaign(message, companyId);
+            await verifyCampaignMessageAndCloseTicket(message, companyId);
+          }
+        }).catch(err => {
+          Sentry.captureException(err);
+          logger.error(`Error handling whatsapp message: Err: ${err}`);
+        });
       });
     });
 
