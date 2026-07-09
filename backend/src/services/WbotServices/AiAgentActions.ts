@@ -8,6 +8,7 @@ import SgpService from "../SgpServices/SgpService";
 import { WASocket } from "@whiskeysockets/baileys";
 import formatBody from "../../helpers/Mustache";
 import phoneOwnershipMatches from "../../helpers/PhoneOwnership";
+import FindOrCreateAiUserService from "../UserServices/FindOrCreateAiUserService";
 
 const ACTION_MARKERS = {
   transferirAtendimento: "Ação: Transferir para Atendimento",
@@ -129,10 +130,12 @@ export const handleBuscarBoletoAction = async (
     )
   });
 
+  const aiUser = await FindOrCreateAiUserService(companyId);
   await UpdateTicketService({
     ticketData: { status: "closed" },
     ticketId: ticket.id,
-    companyId
+    companyId,
+    actionUserId: String(aiUser.id)
   });
 };
 
@@ -176,10 +179,12 @@ export const handleLiberarConfiancaAction = async (
         contact
       )
     });
+    const aiUser = await FindOrCreateAiUserService(companyId);
     await UpdateTicketService({
       ticketData: { status: "closed" },
       ticketId: ticket.id,
-      companyId
+      companyId,
+      actionUserId: String(aiUser.id)
     });
     return;
   }

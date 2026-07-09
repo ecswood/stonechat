@@ -22,6 +22,10 @@ jest.mock("../../SgpServices/SgpService", () => ({
     liberarConfianca: jest.fn()
   }
 }));
+jest.mock("../../UserServices/FindOrCreateAiUserService", () => ({
+  __esModule: true,
+  default: jest.fn()
+}));
 
 // eslint-disable-next-line import/first
 import Tag from "../../../models/Tag";
@@ -33,6 +37,8 @@ import Queue from "../../../models/Queue";
 import UpdateTicketService from "../../TicketServices/UpdateTicketService";
 // eslint-disable-next-line import/first
 import SgpService from "../../SgpServices/SgpService";
+// eslint-disable-next-line import/first
+import FindOrCreateAiUserService from "../../UserServices/FindOrCreateAiUserService";
 // eslint-disable-next-line import/first
 import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, dispatchAiAction, isAiHandledTicket } from "../AiAgentActions";
 
@@ -121,7 +127,10 @@ describe("handleBuscarBoletoAction", () => {
   const ticket = { id: 22, companyId: 1, contact: { number: "554388515951" } } as any;
   const contact = { number: "554388515951" } as any;
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+  });
 
   it("envia o boleto e fecha o ticket quando encontrado", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
@@ -146,10 +155,12 @@ describe("handleBuscarBoletoAction", () => {
     expect(
       sentTexts.some(t => t.includes("Protocolo:") && t.includes("#22"))
     ).toBe(true);
+    expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
       ticketId: 22,
-      companyId: 1
+      companyId: 1,
+      actionUserId: "999"
     });
   });
 
@@ -221,7 +232,10 @@ describe("handleLiberarConfiancaAction", () => {
   const ticket = { id: 22, companyId: 1 } as any;
   const contact = { number: "554388515951" } as any;
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+  });
 
   it("libera e fecha o ticket quando bem-sucedido", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
@@ -242,10 +256,12 @@ describe("handleLiberarConfiancaAction", () => {
       "09cz5dle",
       1879
     );
+    expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
       ticketId: 22,
-      companyId: 1
+      companyId: 1,
+      actionUserId: "999"
     });
   });
 
