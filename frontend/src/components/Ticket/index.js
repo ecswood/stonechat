@@ -80,8 +80,9 @@ const Ticket = () => {
           const { queueId } = data;
           const { queues, profile } = user;
 
-          const queueAllowed = queues.find((q) => q.id === queueId);
-          if (queueAllowed === undefined && profile !== "admin") {
+          const queueAllowed =
+            queueId === null || queues.find((q) => q.id === queueId);
+          if (!queueAllowed && profile !== "admin") {
             toast.error(i18n.t("tickets.toasts.unauthorized"));
             history.push("/tickets");
             return;

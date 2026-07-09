@@ -1,10 +1,9 @@
-import React, { useState } from "react";
+import React from "react";
 import { makeStyles } from "@material-ui/core/styles";
 import { useHistory } from "react-router-dom";
 
 import { i18n } from "../../translate/i18n";
 import usePipelineTickets from "../../hooks/usePipelineTickets";
-import TicketMessagesDialog from "../TicketMessagesDialog";
 
 const useStyles = makeStyles(() => ({
   root: {
@@ -134,11 +133,8 @@ const TicketsPipelineBoard = () => {
   const classes = useStyles();
   const history = useHistory();
   const { pipeline, loading, pullTicket } = usePipelineTickets();
-  const [peekTicketId, setPeekTicketId] = useState(null);
 
-  const handleOpenReadOnly = (ticket) => setPeekTicketId(ticket.id);
-
-  const handleOpenNormal = (ticket) => history.push(`/tickets/${ticket.uuid}`);
+  const handleOpen = (ticket) => history.push(`/tickets/${ticket.uuid}`);
 
   const handlePull = async (ticket) => {
     const ok = await pullTicket(ticket.id);
@@ -157,27 +153,22 @@ const TicketsPipelineBoard = () => {
         title={i18n.t("ticketsPipeline.ia")}
         tickets={pipeline.ia}
         classes={classes}
-        onOpen={handleOpenReadOnly}
+        onOpen={handleOpen}
         onPull={null}
       />
       <Lane
         title={i18n.t("ticketsPipeline.aguardando")}
         tickets={pipeline.aguardando}
         classes={classes}
-        onOpen={handleOpenNormal}
+        onOpen={handleOpen}
         onPull={handlePull}
       />
       <Lane
         title={i18n.t("ticketsPipeline.atendendo")}
         tickets={pipeline.atendendo}
         classes={classes}
-        onOpen={handleOpenNormal}
+        onOpen={handleOpen}
         onPull={null}
-      />
-      <TicketMessagesDialog
-        open={!!peekTicketId}
-        ticketId={peekTicketId}
-        handleClose={() => setPeekTicketId(null)}
       />
     </div>
   );
