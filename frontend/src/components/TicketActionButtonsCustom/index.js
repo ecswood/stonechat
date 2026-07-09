@@ -132,15 +132,24 @@ const TicketActionButtonsCustom = ({ ticket }) => {
 				</>
 			)}
 			{ticket.status === "pending" && (
-				<ButtonWithSpinner
-					loading={loading}
-					size="small"
-					variant="contained"
-					color="primary"
-					onClick={e => handleUpdateTicketStatus(e, "open", user?.id)}
-				>
-					{i18n.t("messagesList.header.buttons.accept")}
-				</ButtonWithSpinner>
+				<>
+					<ButtonWithSpinner
+						loading={loading}
+						size="small"
+						variant="contained"
+						color="primary"
+						onClick={e => handleUpdateTicketStatus(e, "open", user?.id)}
+					>
+						{i18n.t("messagesList.header.buttons.accept")}
+					</ButtonWithSpinner>
+					<ThemeProvider theme={customTheme}>
+						<Tooltip title={i18n.t("messagesList.header.buttons.resolve")}>
+							<IconButton onClick={e => handleUpdateTicketStatus(e, "closed", user?.id)} color="primary">
+								<CheckCircleIcon />
+							</IconButton>
+						</Tooltip>
+					</ThemeProvider>
+				</>
 			)}
 		</div>
 	);
