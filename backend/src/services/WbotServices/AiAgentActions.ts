@@ -7,7 +7,6 @@ import Contact from "../../models/Contact";
 import SgpService from "../SgpServices/SgpService";
 import { WASocket } from "@whiskeysockets/baileys";
 import formatBody from "../../helpers/Mustache";
-import phoneOwnershipMatches from "../../helpers/PhoneOwnership";
 import FindOrCreateAiUserService from "../UserServices/FindOrCreateAiUserService";
 import closingFarewell from "../../helpers/ClosingFarewell";
 
@@ -142,17 +141,6 @@ export const handleLiberarConfiancaAction = async (
     await wbot.sendMessage(jidOf(contact), {
       text: formatBody("Não localizei seu cadastro pelo CPF/CNPJ informado.", contact)
     });
-    return;
-  }
-
-  if (!phoneOwnershipMatches(contact.number, cliente.telefones)) {
-    await wbot.sendMessage(jidOf(contact), {
-      text: formatBody(
-        "Por segurança, não consegui confirmar que este WhatsApp pertence ao titular desse CPF/CNPJ. Vou te encaminhar para um atendente.",
-        contact
-      )
-    });
-    await transferToQueueByName("Atendimento", ticket, companyId);
     return;
   }
 

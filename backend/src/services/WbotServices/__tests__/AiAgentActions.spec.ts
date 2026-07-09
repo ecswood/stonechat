@@ -323,21 +323,30 @@ describe("handleLiberarConfiancaAction", () => {
     expect(wbot.sendMessage).toHaveBeenCalled();
   });
 
-  it("recusa e transfere pra Atendimento quando o telefone não bate com o CPF informado", async () => {
+  it("libera mesmo quando o telefone não bate com nenhum dos cadastrados no CPF (decisão do Edison 2026-07-09: quem digitou o CPF pode liberar; se der problema na prática, revisamos)", async () => {
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       contratoId: 1879,
       centralSenha: "09cz5dle",
       telefones: ["(11) 3333-4444"]
     });
-    (Queue.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+    (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
+      sucesso: true,
+      protocolo: "260707144900",
+      dataPromessa: "2026-07-08"
+    });
 
     await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
 
-    expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
+    expect(SgpService.liberarConfianca).toHaveBeenCalledWith(
+      "68197756953",
+      "09cz5dle",
+      1879
+    );
     expect(UpdateTicketService).toHaveBeenCalledWith({
-      ticketData: { queueId: 1, useIntegration: false, promptId: null },
+      ticketData: { status: "closed" },
       ticketId: 22,
-      companyId: 1
+      companyId: 1,
+      actionUserId: "999"
     });
   });
 });
