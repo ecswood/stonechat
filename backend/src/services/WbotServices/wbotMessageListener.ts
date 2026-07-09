@@ -719,6 +719,7 @@ Quando o cliente relatar um problema técnico (sem conexão, lentidão, equipame
 Quando o cliente pedir boleto, 2ª via, fatura ou PIX, e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Buscar Boleto'.
 Quando o cliente pedir para liberar/religar a conexão por confiança (mesmo estando em débito), e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Liberar Confiança'.
 Quando o cliente disser que esse não é o CPF/CNPJ dele, quiser trocar o CPF cadastrado, ou pedir pra desvincular o número, termine sua resposta com a frase exata 'Ação: Desvincular CPF'.
+Quando sua resposta terminar com uma dessas frases de Ação (Buscar Boleto, Liberar Confiança), o texto antes da frase de Ação deve ser curto: só avise que vai buscar/processar e peça pra aguardar um momento. Não cumprimente de novo (nada de "bom dia"/"boa noite") nem use o nome do cliente nessa mensagem — o cliente já foi cumprimentado na saudação inicial.
 Nunca invente valores de boleto, datas ou resultados de liberação — o sistema é quem confirma isso ao cliente depois da sua resposta.\n
   ${prompt.prompt}\n`;
 
