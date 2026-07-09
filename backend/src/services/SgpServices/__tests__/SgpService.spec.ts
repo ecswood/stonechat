@@ -113,6 +113,56 @@ describe("SgpService.buscarBoleto", () => {
     });
   });
 
+  it("retorna o título em aberto com vencimento mais próximo, não o primeiro da lista (caso real: Fabricio, CPF 48295396900)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        paginacao: { offset: 0, limit: 250, parcial: 3, total: 3 },
+        titulos: [
+          {
+            id: 90001,
+            clienteContrato: 1879,
+            link: "https://snitelecom.sgp.net.br/boleto/futuro-2027/",
+            status: "aberto",
+            valorCorrigido: 99.9,
+            linhaDigitavel: "",
+            codigoPix: "",
+            dataVencimento: "2027-03-10"
+          },
+          {
+            id: 90002,
+            clienteContrato: 1879,
+            link: "https://snitelecom.sgp.net.br/boleto/vencido/",
+            status: "aberto",
+            valorCorrigido: 50.0,
+            linhaDigitavel: "",
+            codigoPix: "",
+            dataVencimento: "2026-06-01"
+          },
+          {
+            id: 90003,
+            clienteContrato: 1879,
+            link: "https://snitelecom.sgp.net.br/boleto/proximo/",
+            status: "aberto",
+            valorCorrigido: 60.0,
+            linhaDigitavel: "",
+            codigoPix: "",
+            dataVencimento: "2026-07-15"
+          }
+        ]
+      }
+    });
+
+    const result = await SgpService.buscarBoleto("48295396900");
+
+    expect(result).toEqual({
+      linkBoleto: "https://snitelecom.sgp.net.br/boleto/vencido/",
+      linhaDigitavel: null,
+      pixCopiaCola: null,
+      valor: "50",
+      vencimento: "2026-06-01"
+    });
+  });
+
   it("retorna null quando não há nenhum título em aberto", async () => {
     (axios.post as jest.Mock).mockResolvedValue({
       data: {

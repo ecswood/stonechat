@@ -64,7 +64,17 @@ const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
     });
 
     const titulos = response.data?.titulos ?? [];
-    const aberto = titulos.find((t: { status: string }) => t.status === "aberto");
+    const abertos = titulos
+      .filter((t: { status: string }) => t.status === "aberto")
+      .sort(
+        (
+          a: { dataVencimento: string },
+          b: { dataVencimento: string }
+        ) =>
+          new Date(a.dataVencimento).getTime() -
+          new Date(b.dataVencimento).getTime()
+      );
+    const aberto = abertos[0];
     if (!aberto) return null;
 
     return {
