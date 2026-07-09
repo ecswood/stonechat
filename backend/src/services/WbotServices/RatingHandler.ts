@@ -23,8 +23,11 @@ export const verifyRating = (
 };
 
 export const parseValidRating = (bodyMessage: string): number | null => {
-  const rate = parseFloat(bodyMessage);
-  return Number.isNaN(rate) ? null : rate;
+  const trimmed = bodyMessage.trim();
+  if (!/^\d{1,2}$/.test(trimmed)) {
+    return null;
+  }
+  return parseInt(trimmed, 10);
 };
 
 export const handleRating = async (

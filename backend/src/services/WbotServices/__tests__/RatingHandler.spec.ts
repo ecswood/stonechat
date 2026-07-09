@@ -69,6 +69,11 @@ describe("parseValidRating", () => {
     expect(parseValidRating("oi")).toBeNull();
     expect(parseValidRating("")).toBeNull();
   });
+
+  it("retorna null para números que não são uma nota plausível, como um CPF (regressão real: CPF da Clau foi tratado como nota 'válida' e engoliu a mensagem)", () => {
+    expect(parseValidRating("68197756953")).toBeNull();
+    expect(parseValidRating("554396053325")).toBeNull();
+  });
 });
 
 describe("handleRating", () => {
