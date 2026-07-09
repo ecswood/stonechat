@@ -322,8 +322,12 @@ describe("handleLiberarConfiancaAction", () => {
 
 describe("handleDesvincularCpfAction", () => {
   const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const ticket = { id: 38, companyId: 1 } as any;
 
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+  });
 
   it("limpa o cpfCnpj do contato e avisa o cliente", async () => {
     const contact = {
@@ -332,24 +336,43 @@ describe("handleDesvincularCpfAction", () => {
       update: jest.fn().mockResolvedValue(undefined)
     } as any;
 
-    await handleDesvincularCpfAction(contact, wbot);
+    await handleDesvincularCpfAction(contact, wbot, ticket, 1);
 
     expect(contact.update).toHaveBeenCalledWith({ cpfCnpj: null });
     expect(wbot.sendMessage).toHaveBeenCalled();
   });
 
-  it("informa explicitamente ao cliente que o número foi desvinculado daquele CPF (pedido do Edison: cliente precisa saber que a desvinculação realmente aconteceu)", async () => {
+  it("informa explicitamente ao cliente que o número foi desvinculado daquele CPF e agradece (pedido do Edison: cliente precisa saber que a desvinculação realmente aconteceu)", async () => {
     const contact = {
       number: "554388515951",
       cpfCnpj: "68197756953",
       update: jest.fn().mockResolvedValue(undefined)
     } as any;
 
-    await handleDesvincularCpfAction(contact, wbot);
+    await handleDesvincularCpfAction(contact, wbot, ticket, 1);
 
     const [{ text: sentText }] = wbot.sendMessage.mock.calls[0].slice(1);
     expect(sentText).toContain("68197756953");
     expect(sentText.toLowerCase()).toContain("desvincul");
+    expect(sentText.toLowerCase()).toContain("obrigad");
+  });
+
+  it("encerra o atendimento após desvincular, pra que um novo contato peça o CPF do titular de novo (pedido do Edison)", async () => {
+    const contact = {
+      number: "554388515951",
+      cpfCnpj: "68197756953",
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await handleDesvincularCpfAction(contact, wbot, ticket, 1);
+
+    expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { status: "closed" },
+      ticketId: 38,
+      companyId: 1,
+      actionUserId: "999"
+    });
   });
 });
 
@@ -500,6 +523,7 @@ describe("dispatchAiAction", () => {
   });
 
   it("remove a frase-gatilho e desvincula o CPF", async () => {
+    (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
     const contactComCpf = {
       number: "554388515951",
       cpfCnpj: "68197756953",
@@ -516,5 +540,11 @@ describe("dispatchAiAction", () => {
 
     expect(result).toBe("Sem problemas, já vou desvincular.");
     expect(contactComCpf.update).toHaveBeenCalledWith({ cpfCnpj: null });
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { status: "closed" },
+      ticketId: ticket.id,
+      companyId: 1,
+      actionUserId: "999"
+    });
   });
 });

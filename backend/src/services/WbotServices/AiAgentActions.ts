@@ -202,15 +202,25 @@ export const handleLiberarConfiancaAction = async (
 
 export const handleDesvincularCpfAction = async (
   contact: Contact,
-  wbot: WASocket
+  wbot: WASocket,
+  ticket: Ticket,
+  companyId: number
 ): Promise<void> => {
   const cpfAnterior = contact.cpfCnpj;
   await contact.update({ cpfCnpj: null });
   await wbot.sendMessage(jidOf(contact), {
     text: formatBody(
-      `Pronto, este número foi desvinculado do CPF/CNPJ ${cpfAnterior} que estava cadastrado aqui. Pode me informar o novo CPF/CNPJ pra eu continuar te ajudando.`,
+      `Pronto, este número foi desvinculado do CPF/CNPJ ${cpfAnterior} que estava cadastrado aqui. Obrigado pelo contato!`,
       contact
     )
+  });
+
+  const aiUser = await FindOrCreateAiUserService(companyId);
+  await UpdateTicketService({
+    ticketData: { status: "closed" },
+    ticketId: ticket.id,
+    companyId,
+    actionUserId: String(aiUser.id)
   });
 };
 
@@ -259,7 +269,7 @@ export const dispatchAiAction = async (
   if (responseText.includes(ACTION_MARKERS.desvincularCpf)) {
     const cleaned = responseText.replace(ACTION_MARKERS.desvincularCpf, "").trim();
     if (onCleaned) await onCleaned(cleaned);
-    await handleDesvincularCpfAction(contact, wbot);
+    await handleDesvincularCpfAction(contact, wbot, ticket, companyId);
     return onCleaned ? "" : cleaned;
   }
 
