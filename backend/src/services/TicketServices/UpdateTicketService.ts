@@ -120,6 +120,7 @@ const UpdateTicketService = async ({
         ticket.whatsappId,
         companyId
       );
+      let awaitingRating = false;
 
       if (setting?.value === "enabled") {
         if (ticketTraking.ratingAt == null) {
@@ -133,26 +134,24 @@ const UpdateTicketService = async ({
             ratingAt: moment().toDate(),
             userId: actionUserId
           });
-
-          io.to(`company-${ticket.companyId}-open`)
-            .to(`queue-${ticket.queueId}-open`)
-            .to(ticketId.toString())
-            .to(`company-${ticket.companyId}-pipeline`)
-            .emit(`company-${ticket.companyId}-ticket`, {
-              action: "delete",
-              ticketId: ticket.id
-            });
-
-          return { ticket, oldStatus, oldUserId };
+          awaitingRating = true;
+        } else {
+          ticketTraking.ratingAt = moment().toDate();
+          ticketTraking.rated = false;
         }
-        ticketTraking.ratingAt = moment().toDate();
-        ticketTraking.rated = false;
       }
 
-      if (!isNil(complationMessage) && complationMessage !== "") {
-        const body = `\u200e${complationMessage}`;
-        await SendWhatsAppMessage({ body, ticket });
+      if (!awaitingRating) {
+        if (!isNil(complationMessage) && complationMessage !== "") {
+          const body = `\u200e${complationMessage}`;
+          await SendWhatsAppMessage({ body, ticket });
+        }
+
+        ticketTraking.finishedAt = moment().toDate();
+        ticketTraking.whatsappId = ticket.whatsappId;
+        ticketTraking.userId = ticket.userId;
       }
+
       await ticket.update({
         promptId: null,
         integrationId: null,
@@ -160,11 +159,6 @@ const UpdateTicketService = async ({
         typebotStatus: false,
         typebotSessionId: null
       })
-
-      ticketTraking.finishedAt = moment().toDate();
-      ticketTraking.whatsappId = ticket.whatsappId;
-      ticketTraking.userId = ticket.userId;
-
       /*    queueId = null;
             userId = null; */
     }

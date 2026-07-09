@@ -79,11 +79,7 @@ const TicketCard = ({ ticket, classes, onOpen, onPull }) => (
       <span>{ticket.contact?.name}</span>
       <span>#{ticket.id}</span>
     </div>
-    <p style={{ margin: "4px 0" }}>
-      {ticket.contact?.number}
-      <br />
-      {ticket.lastMessage}
-    </p>
+    <p style={{ margin: "4px 0" }}>{ticket.contact?.number}</p>
     {ticket.queue && (
       <div style={{ color: ticket.queue.color, fontWeight: "bold" }}>
         {ticket.queue.name}
