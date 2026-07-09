@@ -1,7 +1,9 @@
+import moment from "moment";
 import { getIO } from "../../libs/socket";
 import AppError from "../../errors/AppError";
 import Ticket from "../../models/Ticket";
 import ShowTicketService from "./ShowTicketService";
+import FindOrCreateATicketTrakingService from "./FindOrCreateATicketTrakingService";
 
 interface Request {
   ticketId: string | number;
@@ -24,6 +26,20 @@ const PullTicketService = async ({
   }
 
   const ticket = await ShowTicketService(ticketId, companyId);
+
+  const ticketTraking = await FindOrCreateATicketTrakingService({
+    ticketId,
+    companyId,
+    whatsappId: ticket.whatsappId
+  });
+
+  await ticketTraking.update({
+    startedAt: moment().toDate(),
+    ratingAt: null,
+    rated: false,
+    whatsappId: ticket.whatsappId,
+    userId
+  });
 
   const io = getIO();
   io.to(`company-${companyId}-pending`)

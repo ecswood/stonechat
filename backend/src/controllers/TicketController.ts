@@ -172,7 +172,11 @@ export const pipeline = async (
 
   let queueIds: number[] = [];
   if (queueIdsStringified) {
-    queueIds = JSON.parse(queueIdsStringified);
+    try {
+      queueIds = JSON.parse(queueIdsStringified);
+    } catch {
+      queueIds = [];
+    }
   }
 
   const pipelineTickets = await ListTicketsServicePipeline({
