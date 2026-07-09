@@ -22,6 +22,11 @@ export const verifyRating = (
   return false;
 };
 
+export const parseValidRating = (bodyMessage: string): number | null => {
+  const rate = parseFloat(bodyMessage);
+  return Number.isNaN(rate) ? null : rate;
+};
+
 export const handleRating = async (
   rate: number,
   ticket: Ticket,

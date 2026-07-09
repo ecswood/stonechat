@@ -22,7 +22,7 @@ import ShowWhatsAppService from "../../WhatsappService/ShowWhatsAppService";
 // eslint-disable-next-line import/first
 import SendWhatsAppMessage from "../SendWhatsAppMessage";
 // eslint-disable-next-line import/first
-import { verifyRating, handleRating } from "../RatingHandler";
+import { verifyRating, handleRating, parseValidRating } from "../RatingHandler";
 
 describe("verifyRating", () => {
   it("retorna true quando há rating pendente e a atendente tem dono", () => {
@@ -55,6 +55,19 @@ describe("verifyRating", () => {
       false
     );
     expect(result).toBe(false);
+  });
+});
+
+describe("parseValidRating", () => {
+  it("retorna a nota quando a mensagem é um número válido", () => {
+    expect(parseValidRating("3")).toBe(3);
+    expect(parseValidRating("5")).toBe(5);
+  });
+
+  it("retorna null quando a mensagem não é um número (regressão: 'desvincular' sendo engolido enquanto avaliação está pendente)", () => {
+    expect(parseValidRating("desvincular")).toBeNull();
+    expect(parseValidRating("oi")).toBeNull();
+    expect(parseValidRating("")).toBeNull();
   });
 });
 

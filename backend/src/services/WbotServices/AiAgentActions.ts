@@ -204,10 +204,11 @@ export const handleDesvincularCpfAction = async (
   contact: Contact,
   wbot: WASocket
 ): Promise<void> => {
+  const cpfAnterior = contact.cpfCnpj;
   await contact.update({ cpfCnpj: null });
   await wbot.sendMessage(jidOf(contact), {
     text: formatBody(
-      "Pronto, desvinculei o CPF/CNPJ anterior deste WhatsApp. Pode me informar o novo CPF/CNPJ pra eu continuar te ajudando.",
+      `Pronto, este número foi desvinculado do CPF/CNPJ ${cpfAnterior} que estava cadastrado aqui. Pode me informar o novo CPF/CNPJ pra eu continuar te ajudando.`,
       contact
     )
   });

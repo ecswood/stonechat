@@ -337,6 +337,20 @@ describe("handleDesvincularCpfAction", () => {
     expect(contact.update).toHaveBeenCalledWith({ cpfCnpj: null });
     expect(wbot.sendMessage).toHaveBeenCalled();
   });
+
+  it("informa explicitamente ao cliente que o número foi desvinculado daquele CPF (pedido do Edison: cliente precisa saber que a desvinculação realmente aconteceu)", async () => {
+    const contact = {
+      number: "554388515951",
+      cpfCnpj: "68197756953",
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await handleDesvincularCpfAction(contact, wbot);
+
+    const [{ text: sentText }] = wbot.sendMessage.mock.calls[0].slice(1);
+    expect(sentText).toContain("68197756953");
+    expect(sentText.toLowerCase()).toContain("desvincul");
+  });
 });
 
 describe("dispatchAiAction", () => {

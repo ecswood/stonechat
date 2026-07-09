@@ -57,7 +57,7 @@ import typebotListener from "../TypebotServices/typebotListener";
 import QueueIntegrations from "../../models/QueueIntegrations";
 import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIntegrationService";
 import { registerAiAttendance, dispatchAiAction, isAiHandledTicket } from "./AiAgentActions";
-import { verifyRating, handleRating } from "./RatingHandler";
+import { verifyRating, handleRating, parseValidRating } from "./RatingHandler";
 import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 
 const request = require("request");
@@ -1816,8 +1816,14 @@ const handleMessage = async (
           : false;
 
         if (ticketTraking !== null && verifyRating(ticketTraking, isAiHandled)) {
-          await handleRating(parseFloat(bodyMessage), ticket, ticketTraking);
-          return;
+          const rate = parseValidRating(bodyMessage);
+          if (rate !== null) {
+            await handleRating(rate, ticket, ticketTraking);
+            return;
+          }
+          // Não é uma nota válida (ex: cliente pediu outra coisa, como
+          // "desvincular", enquanto a avaliação está pendente) - não
+          // descarta a mensagem, deixa seguir pro atendimento normal.
         }
       }
     } catch (e) {
