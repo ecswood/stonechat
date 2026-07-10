@@ -40,7 +40,7 @@ import SgpService from "../../SgpServices/SgpService";
 // eslint-disable-next-line import/first
 import FindOrCreateAiUserService from "../../UserServices/FindOrCreateAiUserService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, handleVerificarBloqueioAction, handleEncerrarAtendimentoAction, dispatchAiAction, isAiHandledTicket, isTechnicalDiagnosticTicket } from "../AiAgentActions";
+import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, handleVerificarBloqueioAction, handleEncerrarAtendimentoAction, dispatchAiAction, isAiHandledTicket, isTechnicalDiagnosticTicket, hasAnyActionMarker } from "../AiAgentActions";
 
 const VALID_FAREWELLS = [
   "Tenha uma boa madrugada!",
@@ -775,5 +775,25 @@ describe("dispatchAiAction - Verificar Bloqueio e Encerrar Atendimento", () => {
       companyId: 1,
       actionUserId: "999"
     });
+  });
+});
+
+describe("hasAnyActionMarker", () => {
+  it("retorna true quando a resposta contém alguma frase de Ação", () => {
+    expect(hasAnyActionMarker("Vou buscar. Ação: Buscar Boleto")).toBe(true);
+    expect(hasAnyActionMarker("Ação: Liberar Confiança")).toBe(true);
+    expect(hasAnyActionMarker("texto Ação: Encerrar Atendimento.")).toBe(true);
+  });
+
+  it("retorna false quando a resposta promete uma ação sem incluir a frase-gatilho (regressão real: 'Vou proceder com a solicitação para liberar a conexão por confiança.' sem a Ação, deixando o cliente sem resposta)", () => {
+    expect(
+      hasAnyActionMarker(
+        "Vou proceder com a solicitação para liberar a conexão por confiança."
+      )
+    ).toBe(false);
+  });
+
+  it("retorna false pra uma resposta comum sem nenhuma ação", () => {
+    expect(hasAnyActionMarker("Bom dia! Em que posso ajudar?")).toBe(false);
   });
 });

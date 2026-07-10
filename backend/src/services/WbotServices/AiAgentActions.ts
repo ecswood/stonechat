@@ -9,16 +9,9 @@ import { WASocket } from "@whiskeysockets/baileys";
 import formatBody from "../../helpers/Mustache";
 import FindOrCreateAiUserService from "../UserServices/FindOrCreateAiUserService";
 import closingFarewell from "../../helpers/ClosingFarewell";
+import { ACTION_MARKERS, hasAnyActionMarker } from "../../helpers/ActionMarkers";
 
-const ACTION_MARKERS = {
-  transferirAtendimento: "Ação: Transferir para Atendimento",
-  transferirTecnico: "Ação: Transferir para Técnico",
-  buscarBoleto: "Ação: Buscar Boleto",
-  liberarConfianca: "Ação: Liberar Confiança",
-  desvincularCpf: "Ação: Desvincular CPF",
-  verificarBloqueio: "Ação: Verificar Bloqueio",
-  encerrarAtendimento: "Ação: Encerrar Atendimento"
-} as const;
+export { hasAnyActionMarker };
 
 export const AI_ATTENDANCE_TAG_NAME = "Atendimento IA";
 

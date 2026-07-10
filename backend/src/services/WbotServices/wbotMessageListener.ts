@@ -69,6 +69,7 @@ import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 import shouldProcessMessage from "../../helpers/MessageDedup";
 import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticPhotoTrigger";
 import buildConversationHistory from "../../helpers/BuildConversationHistory";
+import ensureActionMarker from "../../helpers/EnsureActionMarker";
 import withConversationLock from "../../helpers/ConversationLock";
 
 const request = require("request");
@@ -752,14 +753,16 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
     messagesOpenAi.push(...buildConversationHistory(messages));
     messagesOpenAi.push({ role: "user", content: bodyMessage! });
 
-    const chat = await openai.createChatCompletion({
+    const chatParams = {
       model: prompt.model,
       messages: messagesOpenAi,
       max_tokens: prompt.maxTokens,
       temperature: prompt.temperature
-    });
+    };
+    const chat = await openai.createChatCompletion(chatParams);
 
     let response = chat.data.choices[0].message?.content ?? "";
+    response = await ensureActionMarker(openai, chatParams, response);
 
     await registerAiAttendance(ticket, ticket.companyId);
 
@@ -804,13 +807,15 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
     messagesOpenAi.push({ role: "system", content: promptSystem });
     messagesOpenAi.push(...buildConversationHistory(messages));
     messagesOpenAi.push({ role: "user", content: transcription.data.text });
-    const chat = await openai.createChatCompletion({
+    const chatParams = {
       model: prompt.model,
       messages: messagesOpenAi,
       max_tokens: prompt.maxTokens,
       temperature: prompt.temperature
-    });
+    };
+    const chat = await openai.createChatCompletion(chatParams);
     let response = chat.data.choices[0].message?.content ?? "";
+    response = await ensureActionMarker(openai, chatParams, response);
 
     await registerAiAttendance(ticket, ticket.companyId);
 
