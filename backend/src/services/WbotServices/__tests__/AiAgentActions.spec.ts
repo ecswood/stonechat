@@ -40,7 +40,7 @@ import SgpService from "../../SgpServices/SgpService";
 // eslint-disable-next-line import/first
 import FindOrCreateAiUserService from "../../UserServices/FindOrCreateAiUserService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, dispatchAiAction, isAiHandledTicket } from "../AiAgentActions";
+import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, handleVerificarBloqueioAction, handleEncerrarAtendimentoAction, dispatchAiAction, isAiHandledTicket, isTechnicalDiagnosticTicket } from "../AiAgentActions";
 
 const VALID_FAREWELLS = [
   "Tenha uma boa madrugada!",
@@ -590,6 +590,170 @@ describe("dispatchAiAction", () => {
     expect(UpdateTicketService).toHaveBeenCalledWith({
       ticketData: { status: "closed" },
       ticketId: ticket.id,
+      companyId: 1,
+      actionUserId: "999"
+    });
+  });
+});
+
+describe("handleVerificarBloqueioAction", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const contact = { number: "554388515951" } as any;
+  const ticket = { id: 38, companyId: 1 } as any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 7 }, true]);
+    (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
+  });
+
+  it("marca o ticket com a tag 'Diagnostico Tecnico' pra sinalizar que um diagnóstico está em andamento", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoStatus: "Ativo"
+    });
+
+    await handleVerificarBloqueioAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(Tag.findOrCreate).toHaveBeenCalledWith({
+      where: { name: "Diagnostico Tecnico", companyId: 1 },
+      defaults: { name: "Diagnostico Tecnico", companyId: 1, color: "#F59E0B" }
+    });
+    expect(TicketTag.findOrCreate).toHaveBeenCalledWith({
+      where: { ticketId: 38, tagId: 7 }
+    });
+  });
+
+  it("não manda mensagem de bloqueio quando o contrato está Ativo", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoStatus: "Ativo"
+    });
+
+    await handleVerificarBloqueioAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(wbot.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("avisa o cliente quando o contrato está com pendência (caso real: contratoStatus 'Suspenso')", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoStatus: "Suspenso"
+    });
+
+    await handleVerificarBloqueioAction("68197756953", ticket, contact, wbot, 1);
+
+    expect(wbot.sendMessage).toHaveBeenCalled();
+    const [{ text }] = wbot.sendMessage.mock.calls[0].slice(1);
+    expect(text).toContain("Suspenso");
+  });
+
+  it("não manda mensagem nem quebra quando o cliente não é encontrado no SGP", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue(null);
+
+    await handleVerificarBloqueioAction("00000000000", ticket, contact, wbot, 1);
+
+    expect(wbot.sendMessage).not.toHaveBeenCalled();
+  });
+});
+
+describe("isTechnicalDiagnosticTicket", () => {
+  beforeEach(() => jest.clearAllMocks());
+
+  it("retorna true quando o ticket tem a tag Diagnostico Tecnico", async () => {
+    (Tag.findOne as jest.Mock).mockResolvedValue({ id: 7 });
+    (TicketTag.findOne as jest.Mock).mockResolvedValue({});
+
+    const result = await isTechnicalDiagnosticTicket(38, 1);
+
+    expect(result).toBe(true);
+  });
+
+  it("retorna false quando a tag não existe pra essa empresa", async () => {
+    (Tag.findOne as jest.Mock).mockResolvedValue(null);
+
+    const result = await isTechnicalDiagnosticTicket(38, 1);
+
+    expect(result).toBe(false);
+  });
+
+  it("retorna false quando a tag existe mas não está aplicada nesse ticket", async () => {
+    (Tag.findOne as jest.Mock).mockResolvedValue({ id: 7 });
+    (TicketTag.findOne as jest.Mock).mockResolvedValue(null);
+
+    const result = await isTechnicalDiagnosticTicket(38, 1);
+
+    expect(result).toBe(false);
+  });
+});
+
+describe("handleEncerrarAtendimentoAction", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const contact = { number: "554388515951" } as any;
+  const ticket = { id: 38, companyId: 1 } as any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+  });
+
+  it("agradece e fecha o ticket", async () => {
+    await handleEncerrarAtendimentoAction(ticket, contact, wbot, 1);
+
+    expect(wbot.sendMessage).toHaveBeenCalled();
+    const [{ text }] = wbot.sendMessage.mock.calls[0].slice(1);
+    expect(text.toLowerCase()).toContain("agradece");
+    expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { status: "closed" },
+      ticketId: 38,
+      companyId: 1,
+      actionUserId: "999"
+    });
+  });
+});
+
+describe("dispatchAiAction - Verificar Bloqueio e Encerrar Atendimento", () => {
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const ticket = { id: 38, companyId: 1 } as any;
+  const contact = { number: "554388515951", cpfCnpj: "68197756953" } as any;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 7 }, true]);
+    (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
+    (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+  });
+
+  it("remove a frase-gatilho e verifica bloqueio quando o CPF é conhecido", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoStatus: "Ativo"
+    });
+
+    const result = await dispatchAiAction(
+      "Vai ser um prazer te ajudar! Sua internet está lenta ou não acessa nada? Ação: Verificar Bloqueio",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe(
+      "Vai ser um prazer te ajudar! Sua internet está lenta ou não acessa nada?"
+    );
+    expect(SgpService.consultarCliente).toHaveBeenCalledWith("68197756953");
+  });
+
+  it("remove a frase-gatilho e encerra o atendimento", async () => {
+    const result = await dispatchAiAction(
+      "Que bom que voltou ao normal! Ação: Encerrar Atendimento",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe("Que bom que voltou ao normal!");
+    expect(UpdateTicketService).toHaveBeenCalledWith({
+      ticketData: { status: "closed" },
+      ticketId: 38,
       companyId: 1,
       actionUserId: "999"
     });

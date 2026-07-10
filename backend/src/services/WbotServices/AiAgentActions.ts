@@ -15,7 +15,9 @@ const ACTION_MARKERS = {
   transferirTecnico: "Ação: Transferir para Técnico",
   buscarBoleto: "Ação: Buscar Boleto",
   liberarConfianca: "Ação: Liberar Confiança",
-  desvincularCpf: "Ação: Desvincular CPF"
+  desvincularCpf: "Ação: Desvincular CPF",
+  verificarBloqueio: "Ação: Verificar Bloqueio",
+  encerrarAtendimento: "Ação: Encerrar Atendimento"
 } as const;
 
 export const AI_ATTENDANCE_TAG_NAME = "Atendimento IA";
@@ -40,6 +42,23 @@ export const isAiHandledTicket = async (
 ): Promise<boolean> => {
   const tag = await Tag.findOne({
     where: { name: AI_ATTENDANCE_TAG_NAME, companyId }
+  });
+  if (!tag) return false;
+
+  const ticketTag = await TicketTag.findOne({
+    where: { ticketId, tagId: tag.id }
+  });
+  return ticketTag !== null;
+};
+
+export const TECHNICAL_DIAGNOSTIC_TAG_NAME = "Diagnostico Tecnico";
+
+export const isTechnicalDiagnosticTicket = async (
+  ticketId: number,
+  companyId: number
+): Promise<boolean> => {
+  const tag = await Tag.findOne({
+    where: { name: TECHNICAL_DIAGNOSTIC_TAG_NAME, companyId }
   });
   if (!tag) return false;
 
@@ -224,6 +243,56 @@ export const handleDesvincularCpfAction = async (
   });
 };
 
+export const handleVerificarBloqueioAction = async (
+  cpfCnpj: string,
+  ticket: Ticket,
+  contact: Contact,
+  wbot: WASocket,
+  companyId: number
+): Promise<void> => {
+  const [tag] = await Tag.findOrCreate({
+    where: { name: TECHNICAL_DIAGNOSTIC_TAG_NAME, companyId },
+    defaults: { name: TECHNICAL_DIAGNOSTIC_TAG_NAME, companyId, color: "#F59E0B" }
+  });
+  await TicketTag.findOrCreate({
+    where: { ticketId: ticket.id, tagId: tag.id }
+  });
+
+  const cliente = await SgpService.consultarCliente(cpfCnpj);
+  if (!cliente) return;
+
+  if (cliente.contratoStatus.trim().toLowerCase() !== "ativo") {
+    await wbot.sendMessage(jidOf(contact), {
+      text: formatBody(
+        `Verifiquei seu cadastro e encontrei uma pendência: o contrato está com status "${cliente.contratoStatus}". Isso pode ser a causa do problema. Recomendo regularizar para restabelecer o serviço — posso te ajudar a localizar o boleto em aberto, se quiser.`,
+        contact
+      )
+    });
+  }
+};
+
+export const handleEncerrarAtendimentoAction = async (
+  ticket: Ticket,
+  contact: Contact,
+  wbot: WASocket,
+  companyId: number
+): Promise<void> => {
+  await wbot.sendMessage(jidOf(contact), {
+    text: formatBody(
+      `SNI Telecom agradece seu contato. ${closingFarewell(new Date().getHours())}`,
+      contact
+    )
+  });
+
+  const aiUser = await FindOrCreateAiUserService(companyId);
+  await UpdateTicketService({
+    ticketData: { status: "closed" },
+    ticketId: ticket.id,
+    companyId,
+    actionUserId: String(aiUser.id)
+  });
+};
+
 export const dispatchAiAction = async (
   responseText: string,
   ticket: Ticket,
@@ -270,6 +339,22 @@ export const dispatchAiAction = async (
     const cleaned = responseText.replace(ACTION_MARKERS.desvincularCpf, "").trim();
     if (onCleaned) await onCleaned(cleaned);
     await handleDesvincularCpfAction(contact, wbot, ticket, companyId);
+    return onCleaned ? "" : cleaned;
+  }
+
+  if (responseText.includes(ACTION_MARKERS.verificarBloqueio)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.verificarBloqueio, "").trim();
+    if (onCleaned) await onCleaned(cleaned);
+    if (cpfCnpj) {
+      await handleVerificarBloqueioAction(cpfCnpj, ticket, contact, wbot, companyId);
+    }
+    return onCleaned ? "" : cleaned;
+  }
+
+  if (responseText.includes(ACTION_MARKERS.encerrarAtendimento)) {
+    const cleaned = responseText.replace(ACTION_MARKERS.encerrarAtendimento, "").trim();
+    if (onCleaned) await onCleaned(cleaned);
+    await handleEncerrarAtendimentoAction(ticket, contact, wbot, companyId);
     return onCleaned ? "" : cleaned;
   }
 

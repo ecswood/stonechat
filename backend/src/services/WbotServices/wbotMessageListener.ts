@@ -57,10 +57,17 @@ import {
 import typebotListener from "../TypebotServices/typebotListener";
 import QueueIntegrations from "../../models/QueueIntegrations";
 import ShowQueueIntegrationService from "../QueueIntegrationServices/ShowQueueIntegrationService";
-import { registerAiAttendance, dispatchAiAction, isAiHandledTicket } from "./AiAgentActions";
+import {
+  registerAiAttendance,
+  dispatchAiAction,
+  isAiHandledTicket,
+  isTechnicalDiagnosticTicket,
+  transferToQueueByName
+} from "./AiAgentActions";
 import { verifyRating, handleRating, parseValidRating } from "./RatingHandler";
 import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 import shouldProcessMessage from "../../helpers/MessageDedup";
+import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticPhotoTrigger";
 import withConversationLock from "../../helpers/ConversationLock";
 
 const request = require("request");
@@ -720,11 +727,19 @@ Nas respostas utilize o nome ${sanitizeName(
     ticket.id
   } — informe ao cliente na saudação inicial e ao encerrar o atendimento.\n
 Quando o cliente quiser falar com um atendente humano, termine sua resposta com a frase exata 'Ação: Transferir para Atendimento'.
-Quando o cliente relatar um problema técnico (sem conexão, lentidão, equipamento com defeito), termine sua resposta com a frase exata 'Ação: Transferir para Técnico'.
 Quando o cliente pedir boleto, 2ª via, fatura ou PIX, e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Buscar Boleto'.
 Quando o cliente pedir para liberar/religar a conexão por confiança (mesmo estando em débito), e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Liberar Confiança'.
 Quando o cliente disser que esse não é o CPF/CNPJ dele, quiser trocar o CPF cadastrado, ou pedir pra desvincular o número, termine sua resposta com a frase exata 'Ação: Desvincular CPF'.
-Quando sua resposta terminar com uma dessas frases de Ação (Buscar Boleto, Liberar Confiança, Desvincular CPF), o texto antes da frase de Ação deve ser curto e falar exatamente sobre a ação que você vai tomar (buscar o boleto, processar a liberação, ou desvincular o CPF - nunca fale de uma ação diferente da que você está de fato acionando): só avise o que vai fazer e peça pra aguardar um momento. Não cumprimente de novo (nada de "bom dia"/"boa noite") nem use o nome do cliente nessa mensagem — o cliente já foi cumprimentado na saudação inicial.
+
+Fluxo de suporte técnico (problema de conexão/internet, ex: "estou sem internet", "minha internet está ruim", "sem conexão", "internet lenta", "caiu a internet"):
+1. Na primeira vez que o cliente relatar esse tipo de problema nesta conversa, e o CPF/CNPJ já for conhecido, pergunte: "[Nome], vai ser um prazer te ajudar! Preciso que me dê mais detalhes sobre sua internet: ela está lenta ou não está acessando nada?" e termine essa resposta com a frase exata 'Ação: Verificar Bloqueio'.
+2. IMPORTANTE — antes de continuar o diagnóstico técnico, olhe TODO o histórico desta conversa: se QUALQUER mensagem sua (mesmo mensagens anteriores, de antes da pergunta atual) já mencionou pendência, bloqueio, ou contrato suspenso/cancelado no cadastro do cliente, isso significa que a causa já é conhecida e NÃO tem nada a ver com os equipamentos. Nesse caso, PARE aqui: não peça para reiniciar nada, não pergunte mais nada sobre o diagnóstico técnico — apenas ofereça ajuda com a questão financeira (buscar boleto) ou transferência. Reiniciar equipamento não resolve uma linha suspensa por pendência financeira.
+3. Só se NENHUMA mensagem anterior mencionou bloqueio/pendência: depois que o cliente responder sobre a conexão (lenta ou sem acesso, tanto faz a resposta), na sua próxima mensagem peça: "Peço que desligue todos os equipamentos (roteador, conversor de fibra/ONU e antena, se houver), aguarde 30 segundos e ligue tudo novamente. Me avise se voltou ao normal ou não. Vou ficar por aqui aguardando, qualquer coisa é só chamar!" Não use nenhuma frase de Ação nessa mensagem.
+4. Se o cliente disser que voltou ao normal, responda SÓ isso, sem frase de Ação nenhuma: "Fico feliz que voltou ao normal! Posso te ajudar em algo mais?" — e espere a resposta dele numa mensagem separada. NUNCA use 'Ação: Encerrar Atendimento' nessa mesma mensagem que pergunta "posso ajudar em algo mais?". Só na mensagem seguinte, depois que o cliente confirmar (numa mensagem própria dele) que está tudo certo e não precisa de mais nada, agradeça e termine ESSA resposta com a frase exata 'Ação: Encerrar Atendimento'.
+5. Se o cliente disser que NÃO voltou ao normal, peça para enviar fotos dos equipamentos (roteador, conversor de fibra/ONU, antena) e das fontes de alimentação. Não use nenhuma frase de Ação nessa mensagem — assim que as fotos chegarem, o sistema transfere automaticamente para o suporte técnico.
+
+Quando sua resposta terminar com a frase de Ação 'Ação: Verificar Bloqueio', o texto antes dela deve ser a pergunta sobre a conexão descrita no passo 1 acima (não uma frase curta de "aguarde").
+Quando sua resposta terminar com qualquer uma das outras frases de Ação (Buscar Boleto, Liberar Confiança, Desvincular CPF, Encerrar Atendimento), o texto antes da frase de Ação deve ser curto e falar exatamente sobre a ação que você vai tomar (nunca fale de uma ação diferente da que você está de fato acionando). Não cumprimente de novo (nada de "bom dia"/"boa noite") nem use o nome do cliente nessa mensagem — o cliente já foi cumprimentado na saudação inicial.
 Nunca invente valores de boleto, datas ou resultados de liberação — o sistema é quem confirma isso ao cliente depois da sua resposta.\n
   ${prompt.prompt}\n`;
 
@@ -1848,6 +1863,32 @@ const handleMessage = async (
       mediaSent = await verifyMediaMessage(msg, ticket, contact);
     } else {
       await verifyMessage(msg, ticket, contact);
+    }
+
+    try {
+      const hasTechnicalDiagnosticTag = await isTechnicalDiagnosticTicket(
+        ticket.id,
+        companyId
+      );
+      if (
+        shouldTransferToTechnicalSupport({
+          isImageMessage: Boolean(msg.message?.imageMessage),
+          fromMe: Boolean(msg.key.fromMe),
+          hasTechnicalDiagnosticTag,
+          ticketQueueIdIsNull: ticket.queueId === null
+        })
+      ) {
+        await (wbot as WASocket).sendMessage(msg.key.remoteJid!, {
+          text: formatBody(
+            "Vou te transferir para um agente de suporte técnico. Por favor, aguarde um instante.",
+            contact
+          )
+        });
+        await transferToQueueByName("Técnico", ticket, companyId);
+      }
+    } catch (e) {
+      Sentry.captureException(e);
+      console.log(e);
     }
 
     const currentSchedule = await VerifyCurrentSchedule(companyId);
