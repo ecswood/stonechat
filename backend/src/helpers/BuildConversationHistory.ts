@@ -20,7 +20,8 @@ const buildConversationHistory = (
     .filter(
       message =>
         message.mediaType === "conversation" ||
-        message.mediaType === "extendedTextMessage"
+        message.mediaType === "extendedTextMessage" ||
+        message.mediaType === "audio"
     )
     .reverse()
     .map(message => ({

@@ -18,15 +18,29 @@ describe("buildConversationHistory", () => {
     ]);
   });
 
-  it("ignora mensagens que não são texto simples (ex: mídia)", () => {
+  it("ignora mensagens de mídia sem conteúdo de texto real (ex: imagem sem legenda)", () => {
     const messagesDesc = [
-      { fromMe: true, body: "Áudio", mediaType: "audio" },
+      { fromMe: true, body: "-", mediaType: "image" },
       { fromMe: false, body: "oi", mediaType: "conversation" }
     ];
 
     const result = buildConversationHistory(messagesDesc);
 
     expect(result).toEqual([{ role: "user", content: "oi" }]);
+  });
+
+  it("inclui mensagens de áudio com a transcrição/resposta já salva no body (regressão real: áudio ficava com body 'Áudio' genérico e sumia do histórico, fazendo a IA perder o contexto do que foi dito por voz)", () => {
+    const messagesDesc = [
+      { fromMe: true, body: "Vou verificar isso pra você.", mediaType: "audio" },
+      { fromMe: false, body: "estou sem internet", mediaType: "audio" }
+    ];
+
+    const result = buildConversationHistory(messagesDesc);
+
+    expect(result).toEqual([
+      { role: "user", content: "estou sem internet" },
+      { role: "assistant", content: "Vou verificar isso pra você." }
+    ]);
   });
 
   it("mapeia fromMe=true pra assistant e fromMe=false pra user", () => {

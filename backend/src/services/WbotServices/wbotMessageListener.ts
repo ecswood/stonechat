@@ -790,6 +790,16 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
     const file = fs.createReadStream(`${publicFolder}/${mediaUrl}`) as any;
     const transcription = await openai.createTranscription(file, "whisper-1");
 
+    try {
+      // getBodyMessage salva "Áudio" genérico pra qualquer nota de voz -
+      // sem a transcrição aqui, o histórico da conversa (buildConversationHistory)
+      // não tem como saber o que o cliente disse por voz nos próximos turnos.
+      await mediaSent!.update({ body: transcription.data.text });
+    } catch (e) {
+      Sentry.captureException(e);
+      console.log(e);
+    }
+
     messagesOpenAi = [];
     messagesOpenAi.push({ role: "system", content: promptSystem });
     messagesOpenAi.push(...buildConversationHistory(messages));
@@ -818,7 +828,8 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
           mimetype: "audio/ogg; codecs=opus",
           ptt: true
         });
-        await verifyMediaMessage(sentMessage!, ticket, contact);
+        const savedMessage = await verifyMediaMessage(sentMessage!, ticket, contact);
+        await savedMessage.update({ body: text });
       } catch (error) {
         logger.error(`Erro ao responder com áudio: ${error}`);
         const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
