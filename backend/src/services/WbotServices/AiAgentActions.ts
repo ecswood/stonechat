@@ -293,6 +293,9 @@ export const handleEncerrarAtendimentoAction = async (
   });
 };
 
+const stripActionMarker = (responseText: string, marker: string): string =>
+  responseText.replace(`${marker}.`, "").replace(marker, "").trim();
+
 export const dispatchAiAction = async (
   responseText: string,
   ticket: Ticket,
@@ -304,21 +307,21 @@ export const dispatchAiAction = async (
   const cpfCnpj = contact.cpfCnpj;
 
   if (responseText.includes(ACTION_MARKERS.transferirAtendimento)) {
-    const cleaned = responseText.replace(ACTION_MARKERS.transferirAtendimento, "").trim();
+    const cleaned = stripActionMarker(responseText, ACTION_MARKERS.transferirAtendimento);
     if (onCleaned) await onCleaned(cleaned);
     await transferToQueueByName("Atendimento", ticket, companyId);
     return onCleaned ? "" : cleaned;
   }
 
   if (responseText.includes(ACTION_MARKERS.transferirTecnico)) {
-    const cleaned = responseText.replace(ACTION_MARKERS.transferirTecnico, "").trim();
+    const cleaned = stripActionMarker(responseText, ACTION_MARKERS.transferirTecnico);
     if (onCleaned) await onCleaned(cleaned);
     await transferToQueueByName("Técnico", ticket, companyId);
     return onCleaned ? "" : cleaned;
   }
 
   if (responseText.includes(ACTION_MARKERS.buscarBoleto)) {
-    const cleaned = responseText.replace(ACTION_MARKERS.buscarBoleto, "").trim();
+    const cleaned = stripActionMarker(responseText, ACTION_MARKERS.buscarBoleto);
     if (onCleaned) await onCleaned(cleaned);
     if (cpfCnpj) {
       await handleBuscarBoletoAction(cpfCnpj, ticket, contact, wbot, companyId);
@@ -327,7 +330,7 @@ export const dispatchAiAction = async (
   }
 
   if (responseText.includes(ACTION_MARKERS.liberarConfianca)) {
-    const cleaned = responseText.replace(ACTION_MARKERS.liberarConfianca, "").trim();
+    const cleaned = stripActionMarker(responseText, ACTION_MARKERS.liberarConfianca);
     if (onCleaned) await onCleaned(cleaned);
     if (cpfCnpj) {
       await handleLiberarConfiancaAction(cpfCnpj, ticket, contact, wbot, companyId);
@@ -336,14 +339,14 @@ export const dispatchAiAction = async (
   }
 
   if (responseText.includes(ACTION_MARKERS.desvincularCpf)) {
-    const cleaned = responseText.replace(ACTION_MARKERS.desvincularCpf, "").trim();
+    const cleaned = stripActionMarker(responseText, ACTION_MARKERS.desvincularCpf);
     if (onCleaned) await onCleaned(cleaned);
     await handleDesvincularCpfAction(contact, wbot, ticket, companyId);
     return onCleaned ? "" : cleaned;
   }
 
   if (responseText.includes(ACTION_MARKERS.verificarBloqueio)) {
-    const cleaned = responseText.replace(ACTION_MARKERS.verificarBloqueio, "").trim();
+    const cleaned = stripActionMarker(responseText, ACTION_MARKERS.verificarBloqueio);
     if (onCleaned) await onCleaned(cleaned);
     if (cpfCnpj) {
       await handleVerificarBloqueioAction(cpfCnpj, ticket, contact, wbot, companyId);
@@ -352,7 +355,7 @@ export const dispatchAiAction = async (
   }
 
   if (responseText.includes(ACTION_MARKERS.encerrarAtendimento)) {
-    const cleaned = responseText.replace(ACTION_MARKERS.encerrarAtendimento, "").trim();
+    const cleaned = stripActionMarker(responseText, ACTION_MARKERS.encerrarAtendimento);
     if (onCleaned) await onCleaned(cleaned);
     await handleEncerrarAtendimentoAction(ticket, contact, wbot, companyId);
     return onCleaned ? "" : cleaned;

@@ -68,6 +68,7 @@ import { verifyRating, handleRating, parseValidRating } from "./RatingHandler";
 import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 import shouldProcessMessage from "../../helpers/MessageDedup";
 import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticPhotoTrigger";
+import buildConversationHistory from "../../helpers/BuildConversationHistory";
 import withConversationLock from "../../helpers/ConversationLock";
 
 const request = require("request");
@@ -748,19 +749,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
   if (msg.message?.conversation || msg.message?.extendedTextMessage?.text) {
     messagesOpenAi = [];
     messagesOpenAi.push({ role: "system", content: promptSystem });
-    for (let i = 0; i < Math.min(maxMessages, messages.length); i++) {
-      const message = messages[i];
-      if (
-        message.mediaType === "conversation" ||
-        message.mediaType === "extendedTextMessage"
-      ) {
-        if (message.fromMe) {
-          messagesOpenAi.push({ role: "assistant", content: message.body });
-        } else {
-          messagesOpenAi.push({ role: "user", content: message.body });
-        }
-      }
-    }
+    messagesOpenAi.push(...buildConversationHistory(messages));
     messagesOpenAi.push({ role: "user", content: bodyMessage! });
 
     const chat = await openai.createChatCompletion({
@@ -803,19 +792,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
 
     messagesOpenAi = [];
     messagesOpenAi.push({ role: "system", content: promptSystem });
-    for (let i = 0; i < Math.min(maxMessages, messages.length); i++) {
-      const message = messages[i];
-      if (
-        message.mediaType === "conversation" ||
-        message.mediaType === "extendedTextMessage"
-      ) {
-        if (message.fromMe) {
-          messagesOpenAi.push({ role: "assistant", content: message.body });
-        } else {
-          messagesOpenAi.push({ role: "user", content: message.body });
-        }
-      }
-    }
+    messagesOpenAi.push(...buildConversationHistory(messages));
     messagesOpenAi.push({ role: "user", content: transcription.data.text });
     const chat = await openai.createChatCompletion({
       model: prompt.model,

@@ -741,6 +741,24 @@ describe("dispatchAiAction - Verificar Bloqueio e Encerrar Atendimento", () => {
     expect(SgpService.consultarCliente).toHaveBeenCalledWith("68197756953");
   });
 
+  it("remove também um ponto final sobrando logo após a frase-gatilho (regressão real: ficava '...nada? .' na mensagem salva)", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoStatus: "Ativo"
+    });
+
+    const result = await dispatchAiAction(
+      "Vai ser um prazer te ajudar! Sua internet está lenta ou não acessa nada? Ação: Verificar Bloqueio.",
+      ticket,
+      contact,
+      wbot,
+      1
+    );
+
+    expect(result).toBe(
+      "Vai ser um prazer te ajudar! Sua internet está lenta ou não acessa nada?"
+    );
+  });
+
   it("remove a frase-gatilho e encerra o atendimento", async () => {
     const result = await dispatchAiAction(
       "Que bom que voltou ao normal! Ação: Encerrar Atendimento",
