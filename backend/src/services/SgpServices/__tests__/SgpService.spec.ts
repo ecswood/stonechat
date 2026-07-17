@@ -42,7 +42,8 @@ describe("SgpService.consultarCliente", () => {
     });
     expect(axios.post).toHaveBeenCalledWith(
       "https://snitelecom.sgp.net.br/api/ura/consultacliente/",
-      { token: "token-teste", app: "StoneChat", cpfcnpj: "12345678900" }
+      { token: "token-teste", app: "StoneChat", cpfcnpj: "12345678900" },
+      { timeout: 8000 }
     );
   });
 
@@ -62,6 +63,32 @@ describe("SgpService.consultarCliente", () => {
     await expect(SgpService.consultarCliente("12345678900")).rejects.toThrow(
       "timeout"
     );
+    expect(axios.post).toHaveBeenCalledTimes(2);
+  });
+
+  it("tenta de novo automaticamente quando a primeira chamada falha, usando o resultado da segunda tentativa", async () => {
+    (axios.post as jest.Mock)
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce({
+        data: {
+          contratos: [
+            {
+              razaoSocial: "Edison Carlos",
+              cpfCnpj: "12345678900",
+              contratoStatusDisplay: "Ativo",
+              clienteId: 42,
+              contratoId: 99,
+              contratoCentralSenha: "09cz5dle",
+              telefones: []
+            }
+          ]
+        }
+      });
+
+    const result = await SgpService.consultarCliente("12345678900");
+
+    expect(result).not.toBeNull();
+    expect(axios.post).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -204,6 +231,7 @@ describe("SgpService.buscarBoleto", () => {
     await expect(SgpService.buscarBoleto("05914704979")).rejects.toThrow(
       "timeout"
     );
+    expect(axios.post).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -236,7 +264,8 @@ describe("SgpService.liberarConfianca", () => {
     });
     expect(axios.post).toHaveBeenCalledWith(
       "https://snitelecom.sgp.net.br/api/central/promessapagamento/",
-      { cpfcnpj: "68197756953", senha: "09cz5dle", contrato: 1879 }
+      { cpfcnpj: "68197756953", senha: "09cz5dle", contrato: 1879 },
+      { timeout: 8000 }
     );
   });
 
@@ -292,5 +321,6 @@ describe("SgpService.liberarConfianca", () => {
       motivo: "erro",
       mensagem: "Não foi possível processar a liberação no momento"
     });
+    expect(axios.post).toHaveBeenCalledTimes(2);
   });
 });

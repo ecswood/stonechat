@@ -27,15 +27,42 @@ export type SgpLiberacaoResultado =
 const sgpUrl = (): string => process.env.SGP_URL || "";
 const sgpToken = (): string => process.env.SGP_TOKEN || "";
 
+const SGP_TIMEOUT_MS = 8000;
+
+// Pedido do Edison: falha isolada do SGP (timeout, instabilidade momentânea)
+// não deve incomodar o cliente na hora - tenta mais uma vez automaticamente
+// antes de desistir. Contador de falhas consecutivas e alerta de
+// indisponibilidade ficam pendurados aqui pela Task 3 deste plano.
+let consecutiveFailures = 0;
+
+const withRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
+  try {
+    const result = await fn();
+    consecutiveFailures = 0;
+    return result;
+  } catch {
+    try {
+      const result = await fn();
+      consecutiveFailures = 0;
+      return result;
+    } catch (err) {
+      consecutiveFailures += 1;
+      throw err;
+    }
+  }
+};
+
 const consultarCliente = async (
   cpfCnpj: string
 ): Promise<SgpCliente | null> => {
   try {
-    const response = await axios.post(`${sgpUrl()}/api/ura/consultacliente/`, {
-      token: sgpToken(),
-      app: "StoneChat",
-      cpfcnpj: cpfCnpj
-    });
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/ura/consultacliente/`,
+        { token: sgpToken(), app: "StoneChat", cpfcnpj: cpfCnpj },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
 
     const contratos = response.data?.contratos ?? [];
     if (contratos.length === 0) return null;
@@ -67,11 +94,13 @@ const consultarCliente = async (
 
 const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
   try {
-    const response = await axios.post(`${sgpUrl()}/api/ura/titulos/`, {
-      token: sgpToken(),
-      app: "StoneChat",
-      cpfcnpj: cpfCnpj
-    });
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/ura/titulos/`,
+        { token: sgpToken(), app: "StoneChat", cpfcnpj: cpfCnpj },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
 
     const titulos = response.data?.titulos ?? [];
     const abertos = titulos
@@ -121,9 +150,12 @@ const liberarConfianca = async (
   contratoId: number
 ): Promise<SgpLiberacaoResultado> => {
   try {
-    const response = await axios.post(
-      `${sgpUrl()}/api/central/promessapagamento/`,
-      { cpfcnpj: cpfCnpj, senha: senhaCentral, contrato: contratoId }
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/central/promessapagamento/`,
+        { cpfcnpj: cpfCnpj, senha: senhaCentral, contrato: contratoId },
+        { timeout: SGP_TIMEOUT_MS }
+      )
     );
 
     if (response.data?.status === 1) {
