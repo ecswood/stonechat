@@ -56,12 +56,12 @@ describe("SgpService.consultarCliente", () => {
     expect(result).toBeNull();
   });
 
-  it("retorna null quando a chamada falha", async () => {
+  it("propaga o erro quando a chamada falha, em vez de dizer que o cliente não foi encontrado (regressão real: falha de rede/timeout virava null, e o cliente ouvia 'não localizei seu cadastro' mesmo quando o CPF era real e a consulta simplesmente não rodou)", async () => {
     (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
 
-    const result = await SgpService.consultarCliente("12345678900");
-
-    expect(result).toBeNull();
+    await expect(SgpService.consultarCliente("12345678900")).rejects.toThrow(
+      "timeout"
+    );
   });
 });
 
@@ -196,6 +196,14 @@ describe("SgpService.buscarBoleto", () => {
     const result = await SgpService.buscarBoleto("00000000000");
 
     expect(result).toBeNull();
+  });
+
+  it("propaga o erro quando a chamada falha, em vez de dizer que não há fatura em aberto (regressão real 2026-07-17: cliente com 10 títulos em aberto de verdade ouviu 'não encontrei nenhuma fatura em aberto' - a consulta falhou silenciosamente e ninguém percebeu, sem log nenhum)", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(SgpService.buscarBoleto("05914704979")).rejects.toThrow(
+      "timeout"
+    );
   });
 });
 

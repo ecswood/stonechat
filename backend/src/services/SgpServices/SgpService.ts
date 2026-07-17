@@ -1,4 +1,6 @@
 import axios from "axios";
+import * as Sentry from "@sentry/node";
+import { logger } from "../../utils/logger";
 
 export interface SgpCliente {
   nome: string;
@@ -50,8 +52,16 @@ const consultarCliente = async (
         ? c.telefones.map((t: { contato?: string }) => t.contato ?? "").filter(Boolean)
         : []
     };
-  } catch {
-    return null;
+  } catch (err) {
+    // Regressão real: essa falha era engolida em silêncio (nem log, nem
+    // Sentry) e virava "null" - o cliente ouvia "não localizei seu
+    // cadastro" mesmo quando o CPF era real e a consulta simplesmente
+    // falhou (timeout, instabilidade do SGP, etc.). Propagar o erro deixa
+    // quem chama tratar isso como uma falha de verdade, não como "não
+    // encontrado".
+    Sentry.captureException(err);
+    logger.error(`[SgpService.consultarCliente] cpfCnpj=${cpfCnpj}: ${err}`);
+    throw err;
   }
 };
 
@@ -84,8 +94,15 @@ const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
       valor: String(aberto.valorCorrigido ?? ""),
       vencimento: aberto.dataVencimento ?? ""
     };
-  } catch {
-    return null;
+  } catch (err) {
+    // Regressão real 2026-07-17: cliente com 10 títulos em aberto de
+    // verdade ouviu "não encontrei nenhuma fatura em aberto" porque essa
+    // falha (rede/timeout) era engolida em silêncio e virava "null" - sem
+    // log nenhum pra investigar depois. Propagar deixa quem chama saber
+    // que a consulta falhou, não que o cliente não tem fatura.
+    Sentry.captureException(err);
+    logger.error(`[SgpService.buscarBoleto] cpfCnpj=${cpfCnpj}: ${err}`);
+    throw err;
   }
 };
 
@@ -130,7 +147,9 @@ const liberarConfianca = async (
       motivo: "erro",
       mensagem: "Não foi possível processar a liberação no momento"
     };
-  } catch {
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.liberarConfianca] cpfCnpj=${cpfCnpj}: ${err}`);
     return {
       sucesso: false,
       motivo: "erro",

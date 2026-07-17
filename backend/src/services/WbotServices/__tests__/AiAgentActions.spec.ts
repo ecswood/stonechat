@@ -4,7 +4,7 @@ jest.mock("../../../models/Tag", () => ({
 }));
 jest.mock("../../../models/TicketTag", () => ({
   __esModule: true,
-  default: { findOrCreate: jest.fn(), findOne: jest.fn() }
+  default: { findOrCreate: jest.fn(), findOne: jest.fn(), destroy: jest.fn() }
 }));
 jest.mock("../../../models/Queue", () => ({
   __esModule: true,
@@ -26,6 +26,10 @@ jest.mock("../../UserServices/FindOrCreateAiUserService", () => ({
   __esModule: true,
   default: jest.fn()
 }));
+jest.mock("../../MessageServices/CreateMessageService", () => ({
+  __esModule: true,
+  default: jest.fn().mockResolvedValue(undefined)
+}));
 
 // eslint-disable-next-line import/first
 import Tag from "../../../models/Tag";
@@ -39,6 +43,8 @@ import UpdateTicketService from "../../TicketServices/UpdateTicketService";
 import SgpService from "../../SgpServices/SgpService";
 // eslint-disable-next-line import/first
 import FindOrCreateAiUserService from "../../UserServices/FindOrCreateAiUserService";
+// eslint-disable-next-line import/first
+import CreateMessageService from "../../MessageServices/CreateMessageService";
 // eslint-disable-next-line import/first
 import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, handleVerificarBloqueioAction, handleEncerrarAtendimentoAction, dispatchAiAction, isAiHandledTicket, isTechnicalDiagnosticTicket, hasAnyActionMarker } from "../AiAgentActions";
 
@@ -119,7 +125,7 @@ describe("transferToQueueByName", () => {
 
     expect(result).toBe(true);
     expect(UpdateTicketService).toHaveBeenCalledWith({
-      ticketData: { queueId: 7, useIntegration: false, promptId: null },
+      ticketData: { queueId: 7, useIntegration: false, promptId: null, status: "pending" },
       ticketId: 22,
       companyId: 1
     });
@@ -140,7 +146,7 @@ describe("transferToQueueByName", () => {
 });
 
 describe("handleBuscarBoletoAction", () => {
-  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
   const ticket = { id: 22, companyId: 1, contact: { number: "554388515951" } } as any;
   const contact = { number: "554388515951" } as any;
 
@@ -149,7 +155,9 @@ describe("handleBuscarBoletoAction", () => {
     (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
   });
 
-  it("envia o boleto e fecha o ticket quando encontrado", async () => {
+  it("envia o boleto e pergunta se pode ajudar em algo mais, sem fechar o ticket (pedido do Edison: não encerra na hora, aguarda confirmação)", async () => {
+    (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 21 }, true]);
+    (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       telefones: ["(43) 98851-5951"]
     });
@@ -169,17 +177,76 @@ describe("handleBuscarBoletoAction", () => {
     );
     expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
     expect(sentTexts.some(t => t.includes("00020126"))).toBe(true);
-    expect(
-      sentTexts.some(t => t.includes("Protocolo:") && t.includes("#22"))
-    ).toBe(true);
-    expectClosingFarewell(sentTexts);
-    expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
-    expect(UpdateTicketService).toHaveBeenCalledWith({
-      ticketData: { status: "closed" },
-      ticketId: 22,
-      companyId: 1,
-      actionUserId: "999"
+    expect(sentTexts.some(t => t.includes("Posso te ajudar em algo mais"))).toBe(
+      true
+    );
+    expect(sentTexts.some(t => t.includes("Protocolo"))).toBe(false);
+    // marca a tag de aguardando confirmação em vez de fechar o ticket
+    expect(TicketTag.findOrCreate).toHaveBeenCalledWith({
+      where: { ticketId: 22, tagId: 21 }
     });
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
+
+  it("salva a mensagem 'posso ajudar em algo mais' no banco (mesmo mecanismo síncrono das outras mensagens finais)", async () => {
+    (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 21 }, true]);
+    (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: null,
+      pixCopiaCola: null,
+      valor: "99.90",
+      vencimento: "2026-07-15"
+    });
+
+    await handleBuscarBoletoAction("12345678900", ticket, contact, wbot, 1);
+
+    expect(CreateMessageService).toHaveBeenCalledWith({
+      messageData: expect.objectContaining({
+        id: "test-msg-id",
+        ticketId: 22,
+        fromMe: true,
+        body: expect.stringContaining("Posso te ajudar em algo mais")
+      }),
+      companyId: 1
+    });
+  });
+
+  it("salva TODAS as mensagens do boleto no banco, na ordem real de envio (regressão real: 'Segue sua fatura' foi enviada mas nunca apareceu no painel, sumida por causa da falha no listener de eco durante instabilidade da sessão do WhatsApp)", async () => {
+    (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 21 }, true]);
+    (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: null,
+      pixCopiaCola: "00020126...",
+      valor: "99.90",
+      vencimento: "2026-07-15"
+    });
+
+    await handleBuscarBoletoAction("12345678900", ticket, contact, wbot, 1);
+
+    const savedBodies = (CreateMessageService as jest.Mock).mock.calls.map(
+      call => call[0].messageData.body
+    );
+    expect(savedBodies.some(b => b.includes("Segue sua fatura"))).toBe(true);
+    expect(savedBodies.some(b => b.includes("PIX Copia e Cola"))).toBe(true);
+    expect(savedBodies.some(b => b.includes("Posso te ajudar em algo mais"))).toBe(
+      true
+    );
+    // salvas na mesma ordem real de envio
+    const boletoIndex = savedBodies.findIndex(b => b.includes("Segue sua fatura"));
+    const pixIndex = savedBodies.findIndex(b => b.includes("PIX Copia e Cola"));
+    const perguntaIndex = savedBodies.findIndex(b =>
+      b.includes("Posso te ajudar em algo mais")
+    );
+    expect(boletoIndex).toBeLessThan(pixIndex);
+    expect(pixIndex).toBeLessThan(perguntaIndex);
   });
 
   it("não inclui 'Linha digitável' nem a string 'null' quando linhaDigitavel é null", async () => {
@@ -248,10 +315,55 @@ describe("handleBuscarBoletoAction", () => {
     expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
     expect(wbot.sendMessage).toHaveBeenCalled();
   });
+
+  it("avisa que a consulta falhou (não que não há fatura) quando o SGP dá erro de verdade (regressão real 2026-07-17: cliente com 10 títulos em aberto ouviu 'não encontrei nenhuma fatura', mas a consulta só tinha falhado - agora propaga o erro)", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
+    (SgpService.buscarBoleto as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await handleBuscarBoletoAction("05914704979", ticket, contact, wbot, 1);
+
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.toLowerCase().includes("não encontrei"))).toBe(
+      false
+    );
+    expect(
+      sentTexts.some(t => t.toLowerCase().includes("não consegui verificar"))
+    ).toBe(true);
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
+
+  it("não pergunta 'posso ajudar em algo mais' nem fecha quando isLastAction=false (pedido do Edison: essa pergunta só faz sentido depois da ÚLTIMA tarefa pendente)", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: null,
+      pixCopiaCola: null,
+      valor: "50.00",
+      vencimento: "2026-07-20"
+    });
+
+    await handleBuscarBoletoAction("12345678900", ticket, contact, wbot, 1, false);
+
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
+    expect(sentTexts.some(t => t.includes("Protocolo"))).toBe(false);
+    expect(
+      sentTexts.some(t => t.includes("Posso te ajudar em algo mais"))
+    ).toBe(false);
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
 });
 
 describe("handleLiberarConfiancaAction", () => {
-  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
   const ticket = { id: 22, companyId: 1 } as any;
   const contact = { number: "554388515951" } as any;
 
@@ -260,7 +372,9 @@ describe("handleLiberarConfiancaAction", () => {
     (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
   });
 
-  it("libera e fecha o ticket quando bem-sucedido", async () => {
+  it("libera e pergunta se pode ajudar em algo mais, sem fechar o ticket (pedido do Edison: não encerra na hora, aguarda confirmação)", async () => {
+    (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 21 }, true]);
+    (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       contratoId: 1879,
       centralSenha: "09cz5dle",
@@ -282,14 +396,19 @@ describe("handleLiberarConfiancaAction", () => {
     const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
       call => call[1].text
     );
-    expectClosingFarewell(sentTexts);
-    expect(FindOrCreateAiUserService).toHaveBeenCalledWith(1);
-    expect(UpdateTicketService).toHaveBeenCalledWith({
-      ticketData: { status: "closed" },
-      ticketId: 22,
-      companyId: 1,
-      actionUserId: "999"
+    expect(sentTexts.some(t => t.includes("Liberei sua conexão"))).toBe(true);
+    // o protocolo do SGP faz parte do resultado entregue, não da despedida
+    expect(sentTexts.some(t => t.includes("260707144900"))).toBe(true);
+    expect(sentTexts.some(t => t.includes("Posso te ajudar em algo mais"))).toBe(
+      true
+    );
+    expect(
+      sentTexts.some(t => t.includes("SNI Telecom agradece seu contato"))
+    ).toBe(false);
+    expect(TicketTag.findOrCreate).toHaveBeenCalledWith({
+      where: { ticketId: 22, tagId: 21 }
     });
+    expect(UpdateTicketService).not.toHaveBeenCalled();
   });
 
   it("avisa o cliente e transfere para Financeiro quando já usou e não cumpriu (status 2 real)", async () => {
@@ -308,7 +427,7 @@ describe("handleLiberarConfiancaAction", () => {
     await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
 
     expect(UpdateTicketService).toHaveBeenCalledWith({
-      ticketData: { queueId: 3, useIntegration: false, promptId: null },
+      ticketData: { queueId: 3, useIntegration: false, promptId: null, status: "pending" },
       ticketId: 22,
       companyId: 1
     });
@@ -323,7 +442,25 @@ describe("handleLiberarConfiancaAction", () => {
     expect(wbot.sendMessage).toHaveBeenCalled();
   });
 
+  it("avisa que a consulta falhou (não inventa 'não localizei') quando o SGP dá erro de verdade ao consultar o cliente", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await handleLiberarConfiancaAction("68197756953", ticket, contact, wbot, 1);
+
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.toLowerCase().includes("não localizei"))).toBe(
+      false
+    );
+    expect(
+      sentTexts.some(t => t.toLowerCase().includes("não consegui verificar"))
+    ).toBe(true);
+  });
+
   it("libera mesmo quando o telefone não bate com nenhum dos cadastrados no CPF (decisão do Edison 2026-07-09: quem digitou o CPF pode liberar; se der problema na prática, revisamos)", async () => {
+    (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 21 }, true]);
+    (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
     (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
       contratoId: 1879,
       centralSenha: "09cz5dle",
@@ -342,17 +479,50 @@ describe("handleLiberarConfiancaAction", () => {
       "09cz5dle",
       1879
     );
-    expect(UpdateTicketService).toHaveBeenCalledWith({
-      ticketData: { status: "closed" },
-      ticketId: 22,
-      companyId: 1,
-      actionUserId: "999"
+    expect(TicketTag.findOrCreate).toHaveBeenCalledWith({
+      where: { ticketId: 22, tagId: 21 }
     });
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
+
+  it("não encerra o atendimento nem manda protocolo/despedida quando isLastAction=false", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      contratoId: 1879,
+      centralSenha: "09cz5dle",
+      telefones: ["(43) 98851-5951"]
+    });
+    (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
+      sucesso: true,
+      protocolo: "260707144900",
+      dataPromessa: "2026-07-08"
+    });
+
+    await handleLiberarConfiancaAction(
+      "68197756953",
+      ticket,
+      contact,
+      wbot,
+      1,
+      false
+    );
+
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.includes("Liberei sua conexão"))).toBe(true);
+    expect(sentTexts.some(t => t.includes("260707144900"))).toBe(true);
+    expect(
+      sentTexts.some(t => t.includes("SNI Telecom agradece seu contato"))
+    ).toBe(false);
+    expect(
+      sentTexts.some(t => t.includes("Posso te ajudar em algo mais"))
+    ).toBe(false);
+    expect(UpdateTicketService).not.toHaveBeenCalled();
   });
 });
 
 describe("handleDesvincularCpfAction", () => {
-  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
   const ticket = { id: 38, companyId: 1 } as any;
 
   beforeEach(() => {
@@ -383,7 +553,8 @@ describe("handleDesvincularCpfAction", () => {
     await handleDesvincularCpfAction(contact, wbot, ticket, 1);
 
     const [{ text: sentText }] = wbot.sendMessage.mock.calls[0].slice(1);
-    expect(sentText).toContain("68197756953");
+    expect(sentText).toContain("681.XXX.XXX-53");
+    expect(sentText).not.toContain("68197756953");
     expect(sentText.toLowerCase()).toContain("desvincul");
     expectClosingFarewell([sentText]);
   });
@@ -421,10 +592,45 @@ describe("handleDesvincularCpfAction", () => {
       actionUserId: "999"
     });
   });
+
+  it("mascara CNPJ (14 dígitos) corretamente na mensagem de desvinculação", async () => {
+    const contact = {
+      number: "554388515951",
+      cpfCnpj: "11222333000181",
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await handleDesvincularCpfAction(contact, wbot, ticket, 1);
+
+    const [{ text: sentText }] = wbot.sendMessage.mock.calls[0].slice(1);
+    expect(sentText).toContain("11.XXX.XXX/XXXX-81");
+    expect(sentText).not.toContain("11222333000181");
+  });
+
+  it("não encerra o atendimento nem manda despedida quando isLastAction=false", async () => {
+    const contact = {
+      number: "554388515951",
+      cpfCnpj: "68197756953",
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await handleDesvincularCpfAction(contact, wbot, ticket, 1, false);
+
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.toLowerCase().includes("desvincul"))).toBe(
+      true
+    );
+    expect(
+      sentTexts.some(t => t.includes("SNI Telecom agradece seu contato"))
+    ).toBe(false);
+    expect(UpdateTicketService).not.toHaveBeenCalled();
+  });
 });
 
 describe("dispatchAiAction", () => {
-  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
   const ticket = { id: 22, companyId: 1 } as any;
   const contact = { number: "554388515951", cpfCnpj: "12345678900" } as any;
 
@@ -492,6 +698,39 @@ describe("dispatchAiAction", () => {
       (wbot.sendMessage as jest.Mock).mock.invocationCallOrder[0]
     );
     expect(result).toBe("");
+  });
+
+  it("sanitiza a narração quando ela afirma um resultado de consulta antes da Ação, mesmo com o marcador presente (regressão real 2026-07-17: 'não consegui localizar o cadastro' seguido do boleto real sendo entregue segundos depois)", async () => {
+    (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+    (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+      telefones: ["(43) 98851-5951"]
+    });
+    (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+      linkBoleto: "https://sgp/boleto/1",
+      linhaDigitavel: null,
+      pixCopiaCola: null,
+      valor: "102.30",
+      vencimento: "2026-07-05"
+    });
+    const onCleaned = jest.fn().mockResolvedValue(undefined);
+
+    await dispatchAiAction(
+      "Edison, não consegui localizar o cadastro com esse CPF. Vou verificar se há alguma pendência. Ação: Buscar Boleto",
+      ticket,
+      contact,
+      wbot,
+      1,
+      onCleaned
+    );
+
+    expect(onCleaned).not.toHaveBeenCalledWith(
+      expect.stringContaining("não consegui localizar")
+    );
+    expect(SgpService.buscarBoleto).toHaveBeenCalled();
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
   });
 
   it("aciona a busca de boleto e remove a frase-gatilho", async () => {
@@ -569,6 +808,56 @@ describe("dispatchAiAction", () => {
     expect(SgpService.consultarCliente).not.toHaveBeenCalled();
   });
 
+  it("pede o CPF/CNPJ explicitamente quando a fala da IA não pede e o CPF ainda não é conhecido (regressão real: Clara disse só 'vou agilizar sua solicitação' por áudio e parou, sem pedir o CPF)", async () => {
+    const contactSemCpf = { number: "554388515951", cpfCnpj: undefined } as any;
+
+    await dispatchAiAction(
+      "Seja bem-vindo à SNI Telecom! Vou agilizar sua solicitação, um momento. Ação: Buscar Boleto",
+      ticket,
+      contactSemCpf,
+      wbot,
+      1
+    );
+
+    expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => /cpf\/cnpj/i.test(t))).toBe(true);
+  });
+
+  it("não duplica o pedido de CPF/CNPJ quando a fala da IA já pediu (Buscar Boleto)", async () => {
+    const contactSemCpf = { number: "554388515951", cpfCnpj: undefined } as any;
+
+    await dispatchAiAction(
+      "Antes preciso do seu CPF. Ação: Buscar Boleto",
+      ticket,
+      contactSemCpf,
+      wbot,
+      1
+    );
+
+    expect(wbot.sendMessage).not.toHaveBeenCalled();
+  });
+
+  it("pede o CPF/CNPJ explicitamente quando a fala da IA não pede e o CPF ainda não é conhecido (Liberar Confiança)", async () => {
+    const contactSemCpf = { number: "554388515951", cpfCnpj: undefined } as any;
+
+    await dispatchAiAction(
+      "Vou agilizar sua solicitação, um momento. Ação: Liberar Confiança",
+      ticket,
+      contactSemCpf,
+      wbot,
+      1
+    );
+
+    expect(SgpService.consultarCliente).not.toHaveBeenCalled();
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => /cpf\/cnpj/i.test(t))).toBe(true);
+  });
+
   it("remove a frase-gatilho e desvincula o CPF", async () => {
     (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
     const contactComCpf = {
@@ -594,10 +883,245 @@ describe("dispatchAiAction", () => {
       actionUserId: "999"
     });
   });
+
+  it("aciona a desvinculação mesmo sem CPF/CNPJ conhecido (a ação não depende de um CPF novo — ela usa o que já está vinculado, ou avisa que não há nada vinculado)", async () => {
+    const contactSemCpf = {
+      number: "554388515951",
+      cpfCnpj: undefined,
+      update: jest.fn().mockResolvedValue(undefined)
+    } as any;
+
+    await dispatchAiAction(
+      "Verificando aqui. Ação: Desvincular CPF",
+      ticket,
+      contactSemCpf,
+      wbot,
+      1
+    );
+
+    expect(contactSemCpf.update).not.toHaveBeenCalled();
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => t.toLowerCase().includes("nenhum cpf"))).toBe(
+      true
+    );
+  });
+
+  describe("múltiplos pedidos na mesma mensagem (pedido do Edison: boleto + religação de confiança juntos)", () => {
+    const wbotMulti = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
+    const ticketMulti = { id: 22, companyId: 1 } as any;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+    });
+
+    it("executa as duas ações em sequência quando o CPF já é conhecido, dando retorno de cada uma (ordem: boleto primeiro, depois liberação)", async () => {
+      const contactComCpf = {
+        number: "554388515951",
+        cpfCnpj: "68197756953"
+      } as any;
+      (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+        contratoId: 1879,
+        centralSenha: "09cz5dle",
+        telefones: ["(43) 98851-5951"]
+      });
+      (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+        linkBoleto: "https://sgp/boleto/1",
+        linhaDigitavel: null,
+        pixCopiaCola: null,
+        valor: "50.00",
+        vencimento: "2026-07-20"
+      });
+      (SgpService.liberarConfianca as jest.Mock).mockResolvedValue({
+        sucesso: true,
+        protocolo: "260707144900",
+        dataPromessa: "2026-07-08"
+      });
+
+      const cleanedCalls: string[] = [];
+      await dispatchAiAction(
+        "Vou buscar seu boleto. Ação: Buscar Boleto Também vou liberar sua conexão. Ação: Liberar Confiança",
+        ticketMulti,
+        contactComCpf,
+        wbotMulti,
+        1,
+        async cleaned => {
+          cleanedCalls.push(cleaned);
+        }
+      );
+
+      expect(cleanedCalls).toEqual([
+        "Vou buscar seu boleto.",
+        "Também vou liberar sua conexão."
+      ]);
+      expect(SgpService.buscarBoleto).toHaveBeenCalledWith("68197756953");
+      expect(SgpService.liberarConfianca).toHaveBeenCalledWith(
+        "68197756953",
+        "09cz5dle",
+        1879
+      );
+      // boleto deve ter sido buscado ANTES da liberação (ordem da mensagem)
+      const boletoCallOrder = (SgpService.buscarBoleto as jest.Mock).mock
+        .invocationCallOrder[0];
+      const liberacaoCallOrder = (SgpService.liberarConfianca as jest.Mock).mock
+        .invocationCallOrder[0];
+      expect(boletoCallOrder).toBeLessThan(liberacaoCallOrder);
+
+      // regressão real (pedido do Edison): nenhuma das duas ações fecha o
+      // ticket na hora — só a ÚLTIMA ação da sequência (liberação) pergunta
+      // se pode ajudar em algo mais; a primeira (boleto) só entrega o
+      // conteúdo, sem perguntar nada ainda.
+      expect(UpdateTicketService).not.toHaveBeenCalled();
+      const sentTexts = (wbotMulti.sendMessage as jest.Mock).mock.calls.map(
+        call => call[1].text
+      );
+      const perguntaMsgs = sentTexts.filter(t =>
+        t.includes("Posso te ajudar em algo mais")
+      );
+      expect(perguntaMsgs).toHaveLength(1);
+      // a pergunta deve vir DEPOIS de "Liberei sua conexão" (2ª/última ação),
+      // não logo após o boleto (1ª ação) — confirma que o boleto não perguntou nada
+      const liberacaoIndex = sentTexts.findIndex(t =>
+        t.includes("Liberei sua conexão")
+      );
+      const perguntaIndex = sentTexts.findIndex(t =>
+        t.includes("Posso te ajudar em algo mais")
+      );
+      expect(liberacaoIndex).toBeLessThan(perguntaIndex);
+    });
+
+    it("pede o CPF/CNPJ apenas uma vez e não executa nenhuma ação quando o número não está vinculado (pedido do Edison: 'senão solicita cpf')", async () => {
+      const contactSemCpf = {
+        number: "554388515951",
+        cpfCnpj: undefined
+      } as any;
+
+      await dispatchAiAction(
+        "Vou verificar tudo pra você. Ação: Buscar Boleto Ação: Liberar Confiança",
+        ticketMulti,
+        contactSemCpf,
+        wbotMulti,
+        1
+      );
+
+      expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
+      expect(SgpService.liberarConfianca).not.toHaveBeenCalled();
+      const sentTexts = (wbotMulti.sendMessage as jest.Mock).mock.calls.map(
+        call => call[1].text
+      );
+      expect(sentTexts.filter(t => /cpf\/cnpj/i.test(t))).toHaveLength(1);
+    });
+  });
+
+  describe("ação pendente forçada pelo sistema (pedido do Edison: tirar a decisão da IA, mas ela continua conversando)", () => {
+    const wbotPend = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
+    const ticketPend = { id: 70, companyId: 1 } as any;
+
+    beforeEach(() => {
+      jest.clearAllMocks();
+      (FindOrCreateAiUserService as jest.Mock).mockResolvedValue({ id: 999 });
+    });
+
+    it("marca a ação pendente quando pede o CPF (sem CPF conhecido)", async () => {
+      (Tag.findOrCreate as jest.Mock).mockResolvedValue([{ id: 55 }, true]);
+      (TicketTag.findOrCreate as jest.Mock).mockResolvedValue([{}, true]);
+      const contactSemCpf = { number: "554388515951", cpfCnpj: undefined } as any;
+
+      await dispatchAiAction(
+        "Um momento. Ação: Buscar Boleto",
+        ticketPend,
+        contactSemCpf,
+        wbotPend,
+        1
+      );
+
+      expect(Tag.findOrCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            name: expect.stringContaining("Buscar Boleto"),
+            companyId: 1
+          })
+        })
+      );
+      expect(TicketTag.findOrCreate).toHaveBeenCalledWith({
+        where: { ticketId: 70, tagId: 55 }
+      });
+    });
+
+    it("aciona a busca de boleto automaticamente quando o CPF chega, mesmo que a fala da IA não tenha NENHUMA frase de Ação (regressão real: a IA alucinou 'não está vinculado' sem acionar nada)", async () => {
+      (Tag.findOne as jest.Mock).mockResolvedValue({ id: 55 });
+      (TicketTag.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+      (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+        telefones: ["(43) 98851-5951"]
+      });
+      (SgpService.buscarBoleto as jest.Mock).mockResolvedValue({
+        linkBoleto: "https://sgp/boleto/1",
+        linhaDigitavel: null,
+        pixCopiaCola: null,
+        valor: "115.65",
+        vencimento: "2026-07-10"
+      });
+      const contactComCpf = { number: "554388515951", cpfCnpj: "68197756953" } as any;
+
+      await dispatchAiAction(
+        "O CPF informado não está vinculado ao nosso sistema.",
+        ticketPend,
+        contactComCpf,
+        wbotPend,
+        1
+      );
+
+      expect(SgpService.buscarBoleto).toHaveBeenCalledWith("68197756953");
+      const sentTexts = (wbotPend.sendMessage as jest.Mock).mock.calls.map(
+        call => call[1].text
+      );
+      expect(sentTexts.some(t => t.includes("https://sgp/boleto/1"))).toBe(true);
+    });
+
+    it("limpa a marca de pendência depois que a ação forçada roda", async () => {
+      (Tag.findOne as jest.Mock).mockResolvedValue({ id: 55 });
+      (TicketTag.findOne as jest.Mock).mockResolvedValue({ id: 1 });
+      (SgpService.consultarCliente as jest.Mock).mockResolvedValue({
+        telefones: ["(43) 98851-5951"]
+      });
+      (SgpService.buscarBoleto as jest.Mock).mockResolvedValue(null);
+      const contactComCpf = { number: "554388515951", cpfCnpj: "68197756953" } as any;
+
+      await dispatchAiAction(
+        "Não achei nada.",
+        ticketPend,
+        contactComCpf,
+        wbotPend,
+        1
+      );
+
+      expect(TicketTag.destroy).toHaveBeenCalledWith({
+        where: { ticketId: 70, tagId: 55 }
+      });
+    });
+
+    it("não força nenhuma ação quando não há pendência marcada (conversa normal)", async () => {
+      (Tag.findOne as jest.Mock).mockResolvedValue(null);
+      const contactComCpf = { number: "554388515951", cpfCnpj: "68197756953" } as any;
+
+      const result = await dispatchAiAction(
+        "De nada! Precisa de mais alguma coisa?",
+        ticketPend,
+        contactComCpf,
+        wbotPend,
+        1
+      );
+
+      expect(result).toBe("De nada! Precisa de mais alguma coisa?");
+      expect(SgpService.buscarBoleto).not.toHaveBeenCalled();
+    });
+  });
 });
 
 describe("handleVerificarBloqueioAction", () => {
-  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
   const contact = { number: "554388515951" } as any;
   const ticket = { id: 38, companyId: 1 } as any;
 
@@ -652,6 +1176,14 @@ describe("handleVerificarBloqueioAction", () => {
 
     expect(wbot.sendMessage).not.toHaveBeenCalled();
   });
+
+  it("não quebra (nem trava o atendimento) quando o SGP dá erro de verdade ao consultar o cliente", async () => {
+    (SgpService.consultarCliente as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(
+      handleVerificarBloqueioAction("00000000000", ticket, contact, wbot, 1)
+    ).resolves.not.toThrow();
+  });
 });
 
 describe("isTechnicalDiagnosticTicket", () => {
@@ -685,7 +1217,7 @@ describe("isTechnicalDiagnosticTicket", () => {
 });
 
 describe("handleEncerrarAtendimentoAction", () => {
-  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
   const contact = { number: "554388515951" } as any;
   const ticket = { id: 38, companyId: 1 } as any;
 
@@ -708,10 +1240,20 @@ describe("handleEncerrarAtendimentoAction", () => {
       actionUserId: "999"
     });
   });
+
+  it("limpa a marca de 'aguardando confirmação' ao encerrar de verdade (pedido do Edison: se o cliente confirmar que não precisa de mais nada, o atendimento fecha e não fica esperando o timeout de 10 minutos à toa)", async () => {
+    (Tag.findOne as jest.Mock).mockResolvedValue({ id: 33 });
+
+    await handleEncerrarAtendimentoAction(ticket, contact, wbot, 1);
+
+    expect(TicketTag.destroy).toHaveBeenCalledWith({
+      where: { ticketId: 38, tagId: 33 }
+    });
+  });
 });
 
 describe("dispatchAiAction - Verificar Bloqueio e Encerrar Atendimento", () => {
-  const wbot = { sendMessage: jest.fn().mockResolvedValue({}) } as any;
+  const wbot = { sendMessage: jest.fn().mockResolvedValue({ key: { id: "test-msg-id" }, status: 1 }) } as any;
   const ticket = { id: 38, companyId: 1 } as any;
   const contact = { number: "554388515951", cpfCnpj: "68197756953" } as any;
 
@@ -757,6 +1299,24 @@ describe("dispatchAiAction - Verificar Bloqueio e Encerrar Atendimento", () => {
     expect(result).toBe(
       "Vai ser um prazer te ajudar! Sua internet está lenta ou não acessa nada?"
     );
+  });
+
+  it("pede o CPF/CNPJ explicitamente quando a fala da IA não pede e o CPF ainda não é conhecido (Verificar Bloqueio)", async () => {
+    const contactSemCpf = { number: "554388515951", cpfCnpj: undefined } as any;
+
+    await dispatchAiAction(
+      "Vou verificar sua conexão. Ação: Verificar Bloqueio",
+      ticket,
+      contactSemCpf,
+      wbot,
+      1
+    );
+
+    expect(SgpService.consultarCliente).not.toHaveBeenCalled();
+    const sentTexts = (wbot.sendMessage as jest.Mock).mock.calls.map(
+      call => call[1].text
+    );
+    expect(sentTexts.some(t => /cpf\/cnpj/i.test(t))).toBe(true);
   });
 
   it("remove a frase-gatilho e encerra o atendimento", async () => {

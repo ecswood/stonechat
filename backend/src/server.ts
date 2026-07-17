@@ -6,6 +6,7 @@ import { StartAllWhatsAppsSessions } from "./services/WbotServices/StartAllWhats
 import Company from "./models/Company";
 import { startQueueProcess } from "./queues";
 import { TransferTicketQueue } from "./wbotTransferTicketQueue";
+import { AutoCloseAfterWaitQueue } from "./AutoCloseAfterWaitQueue";
 import cron from "node-cron";
 
 const server = app.listen(process.env.PORT, async () => {
@@ -34,6 +35,15 @@ cron.schedule("* * * * *", async () => {
     logger.error(error);
   }
 
+});
+
+cron.schedule("* * * * *", async () => {
+  try {
+    await AutoCloseAfterWaitQueue();
+  }
+  catch (error) {
+    logger.error(error);
+  }
 });
 
 initIO(server);

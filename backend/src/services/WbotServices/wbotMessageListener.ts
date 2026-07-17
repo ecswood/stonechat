@@ -70,6 +70,11 @@ import shouldProcessMessage from "../../helpers/MessageDedup";
 import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticPhotoTrigger";
 import buildConversationHistory from "../../helpers/BuildConversationHistory";
 import ensureActionMarker from "../../helpers/EnsureActionMarker";
+import { getGreetingForBrasiliaTime } from "../../helpers/GreetingByTime";
+import { buildTicketProtocol } from "../../helpers/TicketProtocol";
+import { maskCpfCnpj } from "../../helpers/MaskCpfCnpj";
+import { extractValidCpfCnpj } from "../../helpers/ExtractValidCpfCnpj";
+import { clearAwaitingConfirmation } from "../../helpers/PostDeliveryWaitTag";
 import withConversationLock from "../../helpers/ConversationLock";
 
 const request = require("request");
@@ -118,124 +123,7 @@ function hasCaption(title: string, fileName: string) {
   return !fileName.includes(`${title}.${fileNameExtension}`)
 }
 
-export function validaCpfCnpj(val) {
-  if (val.length == 11) {
-    var cpf = val.trim();
-
-    cpf = cpf.replace(/\./g, "");
-    cpf = cpf.replace("-", "");
-    cpf = cpf.split("");
-
-    var v1 = 0;
-    var v2 = 0;
-    var aux = false;
-
-    for (var i = 1; cpf.length > i; i++) {
-      if (cpf[i - 1] != cpf[i]) {
-        aux = true;
-      }
-    }
-
-    if (aux == false) {
-      return false;
-    }
-
-    for (var i = 0, p = 10; cpf.length - 2 > i; i++, p--) {
-      v1 += cpf[i] * p;
-    }
-
-    v1 = (v1 * 10) % 11;
-
-    if (v1 == 10) {
-      v1 = 0;
-    }
-
-    if (v1 != cpf[9]) {
-      return false;
-    }
-
-    for (var i = 0, p = 11; cpf.length - 1 > i; i++, p--) {
-      v2 += cpf[i] * p;
-    }
-
-    v2 = (v2 * 10) % 11;
-
-    if (v2 == 10) {
-      v2 = 0;
-    }
-
-    if (v2 != cpf[10]) {
-      return false;
-    } else {
-      return true;
-    }
-  } else if (val.length == 14) {
-    var cnpj = val.trim();
-
-    cnpj = cnpj.replace(/\./g, "");
-    cnpj = cnpj.replace("-", "");
-    cnpj = cnpj.replace("/", "");
-    cnpj = cnpj.split("");
-
-    var v1 = 0;
-    var v2 = 0;
-    var aux = false;
-
-    for (var i = 1; cnpj.length > i; i++) {
-      if (cnpj[i - 1] != cnpj[i]) {
-        aux = true;
-      }
-    }
-
-    if (aux == false) {
-      return false;
-    }
-
-    for (var i = 0, p1 = 5, p2 = 13; cnpj.length - 2 > i; i++, p1--, p2--) {
-      if (p1 >= 2) {
-        v1 += cnpj[i] * p1;
-      } else {
-        v1 += cnpj[i] * p2;
-      }
-    }
-
-    v1 = v1 % 11;
-
-    if (v1 < 2) {
-      v1 = 0;
-    } else {
-      v1 = 11 - v1;
-    }
-
-    if (v1 != cnpj[12]) {
-      return false;
-    }
-
-    for (var i = 0, p1 = 6, p2 = 14; cnpj.length - 1 > i; i++, p1--, p2--) {
-      if (p1 >= 2) {
-        v2 += cnpj[i] * p1;
-      } else {
-        v2 += cnpj[i] * p2;
-      }
-    }
-
-    v2 = v2 % 11;
-
-    if (v2 < 2) {
-      v2 = 0;
-    } else {
-      v2 = 11 - v2;
-    }
-
-    if (v2 != cnpj[13]) {
-      return false;
-    } else {
-      return true;
-    }
-  } else {
-    return false;
-  }
-}
+export { validaCpfCnpj } from "../../helpers/ValidateCpfCnpj";
 
 function timeout(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -664,16 +552,6 @@ const handleOpenAi = async (
 ): Promise<void> => {
   const bodyMessage = getBodyMessage(msg);
 
-  if (!contact.cpfCnpj && bodyMessage) {
-    const possivelCpfCnpj = bodyMessage.replace(/\D/g, "");
-    if (
-      (possivelCpfCnpj.length === 11 || possivelCpfCnpj.length === 14) &&
-      validaCpfCnpj(possivelCpfCnpj)
-    ) {
-      await contact.update({ cpfCnpj: possivelCpfCnpj });
-    }
-  }
-
   if (!bodyMessage) return;
 
   let { prompt } = await ShowWhatsAppService(wbot.id, ticket.companyId);
@@ -708,6 +586,47 @@ const handleOpenAi = async (
     openai = sessionsOpenAi[openAiIndex];
   }
 
+  // Transcreve o áudio já aqui, antes de tudo, pra que um CPF/CNPJ falado
+  // seja capturado exatamente como um CPF/CNPJ digitado (pedido do Edison:
+  // solicitações em áudio devem funcionar igual às em texto).
+  let transcribedText: string | undefined;
+  if (msg.message?.audioMessage) {
+    const mediaUrl = mediaSent!.mediaUrl!.split("/").pop();
+    const file = fs.createReadStream(`${publicFolder}/${mediaUrl}`) as any;
+    const transcription = await openai.createTranscription(file, "whisper-1");
+    transcribedText = transcription.data.text;
+
+    try {
+      // getBodyMessage salva "Áudio" genérico pra qualquer nota de voz -
+      // sem a transcrição aqui, o histórico da conversa (buildConversationHistory)
+      // não tem como saber o que o cliente disse por voz nos próximos turnos.
+      await mediaSent!.update({ body: transcribedText });
+    } catch (e) {
+      Sentry.captureException(e);
+      console.log(e);
+    }
+  }
+
+  const effectiveText = transcribedText ?? bodyMessage;
+
+  // Usado tanto pra capturar automaticamente quanto pra saber, mais abaixo,
+  // se o cliente acabou de responder com um CPF/CNPJ válido (verificado por
+  // código, não pelo texto do modelo) — sinal confiável de que a resposta
+  // da IA precisa de uma Ação, não importa como ela tenha sido redigida.
+  const cpfCnpjNaMensagemAtual = extractValidCpfCnpj(effectiveText ?? "");
+
+  if (!contact.cpfCnpj && cpfCnpjNaMensagemAtual) {
+    await contact.update({ cpfCnpj: cpfCnpjNaMensagemAtual });
+  }
+
+  // Pedido do Edison: depois de entregar boleto/liberação, o atendimento
+  // aguarda até 10 minutos por uma resposta antes de encerrar sozinho (ver
+  // AutoCloseAfterWaitQueue). Qualquer mensagem nova do cliente cancela essa
+  // espera aqui — o fluxo normal decide o que fazer a seguir (nova Ação ou
+  // 'Ação: Encerrar Atendimento' se o cliente confirmar que não precisa de
+  // mais nada).
+  await clearAwaitingConfirmation(ticket.id, ticket.companyId);
+
   let maxMessages = prompt.maxMessages;
 
   const messages = await Message.findAll({
@@ -717,21 +636,33 @@ const handleOpenAi = async (
   });
 
   const cpfContexto = contact.cpfCnpj
-    ? `O CPF/CNPJ deste cliente já é conhecido: ${contact.cpfCnpj}. Não peça de novo.`
+    ? `O CPF/CNPJ deste cliente já é conhecido: ${maskCpfCnpj(contact.cpfCnpj)}. Não peça de novo.`
     : "O CPF/CNPJ deste cliente ainda não é conhecido. Assim que o cliente disser qual serviço ou ajuda ele precisa (boleto, liberação de confiança, suporte técnico, ou qualquer outra solicitação), peça o CPF/CNPJ do titular antes de prosseguir com o atendimento.";
 
-  const promptSystem = `Seu nome é Clara, assistente virtual da SNI Telecom. Na saudação inicial do atendimento (a primeira mensagem da conversa), cumprimente de acordo com o horário (Bom dia/Boa tarde/Boa noite) e se apresente assim: "Bom dia! Aqui é a Clara, assistente virtual da SNI Telecom. Em que posso te ajudar hoje?" (troque só o cumprimento pelo horário certo). Nas mensagens seguintes da mesma conversa, não repita essa apresentação nem o cumprimento de novo — você já é a Clara, o cliente já sabe.\nNunca cumprimente com "Olá" — sempre que for cumprimentar o cliente (na saudação inicial ou em qualquer outro momento), use Bom dia, Boa tarde ou Boa noite de acordo com o horário atual, seguido do nome do cliente quando fizer sentido.\n
+  const saudacaoAtual = getGreetingForBrasiliaTime();
+
+  const promptSystem = `Seu nome é Clara, assistente virtual da SNI Telecom. O cumprimento correto para agora (horário de Brasília) é "${saudacaoAtual}" — use exatamente essa palavra, nunca calcule ou adivinhe o horário por conta própria.
+Regra da saudação inicial (primeira mensagem do atendimento): a primeira linha da sua resposta é sempre "${saudacaoAtual}, [Nome]!" (troque [Nome] pelo nome do cliente), em linha separada do resto.
+- Só complete com a segunda linha "Aqui é a Clara, assistente virtual da SNI Telecom. Em que posso te ajudar hoje?" quando a mensagem do cliente NÃO disser o que ele precisa (for só um cumprimento, tipo "oi", "bom dia", "boa noite", sem nenhum pedido junto).
+- Se a mensagem do cliente já disser o que ele precisa — mesmo que comece com um cumprimento, ex: "Olá, boa noite, preciso do meu boleto" — a segunda linha NUNCA deve ser essa pergunta genérica "Em que posso te ajudar hoje?" e NUNCA deve ficar vazia (a resposta não pode ser só "${saudacaoAtual}, [Nome]!" sozinho). Isso vale mesmo que o pedido tenha vindo por áudio transcrito.
+  - Se for pedido de boleto/fatura/2ª via/PIX e o CPF/CNPJ JÁ FOR CONHECIDO (veja abaixo se é conhecido ou não): a segunda linha deve ser um acolhimento curto tipo "Seja bem-vindo(a) à SNI Telecom! Vou agilizar sua solicitação, um momento." e só depois disso a frase de Ação 'Ação: Buscar Boleto' — esse acolhimento não conta como "cumprimentar de novo", é permitido mesmo nesta mensagem que já aciona a Ação.
+  - Se o CPF/CNPJ AINDA NÃO for conhecido (qualquer tipo de pedido: boleto, liberação de confiança, suporte técnico, trocar CPF): NUNCA use o acolhimento "vou agilizar sua solicitação" nem qualquer frase de Ação — a segunda linha deve pedir o CPF/CNPJ do titular diretamente, sempre. Confira sempre a informação sobre o CPF/CNPJ mais abaixo antes de decidir qual dos dois casos usar.
+Nas mensagens seguintes da mesma conversa, não repita a apresentação nem o cumprimento de novo — você já é a Clara, o cliente já sabe.\nNunca cumprimente com "Olá" — sempre que for cumprimentar o cliente (na saudação inicial ou em qualquer outro momento), use "${saudacaoAtual}", seguido do nome do cliente quando fizer sentido.\n
 Nas respostas utilize o nome ${sanitizeName(
     contact.name || "Amigo(a)"
   )} para identificar o cliente.\nSua resposta deve usar no máximo ${
     prompt.maxTokens
-  } tokens e cuide para não truncar o final.\nSempre que possível, mencione o nome dele para ser mais personalizado o atendimento e mais educado.\n${cpfContexto}\nO protocolo deste atendimento é #${
+  } tokens e cuide para não truncar o final.\nSempre que possível, mencione o nome dele para ser mais personalizado o atendimento e mais educado.\n${cpfContexto}\nO protocolo deste atendimento é #${buildTicketProtocol(
     ticket.id
-  } — informe ao cliente na saudação inicial e ao encerrar o atendimento.\n
+  )} — use exatamente esse número, nunca calcule ou monte o protocolo por conta própria; não informe esse protocolo na saudação inicial; informe-o ao cliente somente ao encerrar o atendimento.\n
 Quando o cliente quiser falar com um atendente humano, termine sua resposta com a frase exata 'Ação: Transferir para Atendimento'.
 Quando o cliente pedir boleto, 2ª via, fatura ou PIX, e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Buscar Boleto'.
 Quando o cliente pedir para liberar/religar a conexão por confiança (mesmo estando em débito), e o CPF/CNPJ já for conhecido, termine sua resposta com a frase exata 'Ação: Liberar Confiança'.
-Quando o cliente disser que esse não é o CPF/CNPJ dele, quiser trocar o CPF cadastrado, ou pedir pra desvincular o número, termine sua resposta com a frase exata 'Ação: Desvincular CPF'.
+Se você tinha acabado de pedir o CPF/CNPJ pra atender um pedido pendente (boleto, liberação de confiança, suporte técnico) e o cliente acabou de informá-lo na mensagem atual, trate esse CPF/CNPJ como resposta a esse pedido e já acione a Ação correspondente agora nesta mesma resposta — não pare pra confirmar de novo nem invente nenhum resultado sobre o cadastro.
+Você nunca sabe, por conta própria, se um CPF/CNPJ está cadastrado, se tem boleto em aberto, ou qualquer outro resultado de consulta — essa informação só existe depois que você aciona a Ação correspondente e o sistema confirma o resultado ao cliente. Nunca diga que um CPF "não está cadastrado" ou qualquer outra conclusão sobre o cadastro sem antes ter acionado a Ação; se não tem certeza do que fazer, acione a Ação certa e deixe o sistema responder.
+Quando o cliente disser que esse não é o CPF/CNPJ dele, quiser trocar o CPF cadastrado, ou pedir pra desvincular o número, termine sua resposta com a frase exata 'Ação: Desvincular CPF'. NUNCA acione essa Ação por conta própria — em especial, se o cliente informar um CPF/CNPJ pra buscar boleto ou liberar confiança e o sistema disser que não encontrou o cadastro, isso NÃO significa que o CPF está errado nem que o cliente pediu pra desvincular: apenas avise que não localizou o cadastro com esse CPF/CNPJ e pergunte se ele quer confirmar o número novamente ou falar com um atendente — só use 'Ação: Desvincular CPF' se o cliente disser explicitamente, numa mensagem própria dele, que quer desvincular/trocar o CPF. Importante: essa Ação NUNCA precisa de um CPF/CNPJ novo — ela age sobre o que já está vinculado a este número (ou avisa que não há nada vinculado); não peça o CPF/CNPJ antes de acionar 'Ação: Desvincular CPF'.
+Se o cliente pedir mais de uma coisa na mesma mensagem (por texto ou por áudio transcrito — ex: "quero o boleto e também religar por confiança"), inclua uma frase de Ação pra cada pedido, na ordem em que devem ser executados, cada uma com sua própria narração curta logo antes dela, assim: "Vou buscar seu boleto. Ação: Buscar Boleto Também vou liberar sua conexão. Ação: Liberar Confiança". O sistema executa cada Ação em sequência e já dá um retorno ao cliente de cada uma. Se o CPF/CNPJ ainda não for conhecido, não inclua nenhuma frase de Ação — peça o CPF/CNPJ uma única vez antes de tratar qualquer um dos pedidos.
+Depois que o sistema entrega o boleto ou confirma a liberação por confiança, ele mesmo já pergunta ao cliente "Posso te ajudar em algo mais?" e aguarda — você não precisa (nem deve) repetir essa pergunta nem acionar 'Ação: Encerrar Atendimento' nessa hora. Quando o cliente responder essa pergunta: se ele pedir outra coisa, trate esse novo pedido normalmente (com a Ação correspondente, se precisar); se ele disser que não precisa de mais nada (ex: "não, obrigado", "só isso mesmo"), agradeça e termine ESSA resposta com a frase exata 'Ação: Encerrar Atendimento'.
 
 Fluxo de suporte técnico (problema de conexão/internet, ex: "estou sem internet", "minha internet está ruim", "sem conexão", "internet lenta", "caiu a internet"):
 1. Na primeira vez que o cliente relatar esse tipo de problema nesta conversa, e o CPF/CNPJ já for conhecido, pergunte: "[Nome], vai ser um prazer te ajudar! Preciso que me dê mais detalhes sobre sua internet: ela está lenta ou não está acessando nada?" e termine essa resposta com a frase exata 'Ação: Verificar Bloqueio'.
@@ -741,7 +672,7 @@ Fluxo de suporte técnico (problema de conexão/internet, ex: "estou sem interne
 5. Se o cliente disser que NÃO voltou ao normal, peça para enviar fotos dos equipamentos (roteador, conversor de fibra/ONU, antena) e das fontes de alimentação. Não use nenhuma frase de Ação nessa mensagem — assim que as fotos chegarem, o sistema transfere automaticamente para o suporte técnico.
 
 Quando sua resposta terminar com a frase de Ação 'Ação: Verificar Bloqueio', o texto antes dela deve ser a pergunta sobre a conexão descrita no passo 1 acima (não uma frase curta de "aguarde").
-Quando sua resposta terminar com qualquer uma das outras frases de Ação (Buscar Boleto, Liberar Confiança, Desvincular CPF, Encerrar Atendimento), o texto antes da frase de Ação deve ser curto e falar exatamente sobre a ação que você vai tomar (nunca fale de uma ação diferente da que você está de fato acionando). Não cumprimente de novo (nada de "bom dia"/"boa noite") nem use o nome do cliente nessa mensagem — o cliente já foi cumprimentado na saudação inicial.
+Quando sua resposta terminar com qualquer uma das outras frases de Ação (Buscar Boleto, Liberar Confiança, Desvincular CPF, Encerrar Atendimento), o texto antes da frase de Ação deve ser curto e falar exatamente sobre a ação que você vai tomar (nunca fale de uma ação diferente da que você está de fato acionando). Não cumprimente de novo (nada de "bom dia"/"boa noite") nem use o nome do cliente nessa mensagem — o cliente já foi cumprimentado na saudação inicial. EXCEÇÃO: se essa for a primeira mensagem do atendimento (o pedido já veio junto com a saudação inicial), siga a regra da saudação inicial descrita acima em vez desta.
 Nunca invente valores de boleto, datas ou resultados de liberação — o sistema é quem confirma isso ao cliente depois da sua resposta.\n
   ${prompt.prompt}\n`;
 
@@ -762,7 +693,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
     const chat = await openai.createChatCompletion(chatParams);
 
     let response = chat.data.choices[0].message?.content ?? "";
-    response = await ensureActionMarker(openai, chatParams, response);
+    response = await ensureActionMarker(openai, chatParams, response, Boolean(cpfCnpjNaMensagemAtual));
 
     await registerAiAttendance(ticket, ticket.companyId);
 
@@ -789,24 +720,10 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       await verifyMessage(sentMessage!, ticket, contact);
     }
   } else if (msg.message?.audioMessage) {
-    const mediaUrl = mediaSent!.mediaUrl!.split("/").pop();
-    const file = fs.createReadStream(`${publicFolder}/${mediaUrl}`) as any;
-    const transcription = await openai.createTranscription(file, "whisper-1");
-
-    try {
-      // getBodyMessage salva "Áudio" genérico pra qualquer nota de voz -
-      // sem a transcrição aqui, o histórico da conversa (buildConversationHistory)
-      // não tem como saber o que o cliente disse por voz nos próximos turnos.
-      await mediaSent!.update({ body: transcription.data.text });
-    } catch (e) {
-      Sentry.captureException(e);
-      console.log(e);
-    }
-
     messagesOpenAi = [];
     messagesOpenAi.push({ role: "system", content: promptSystem });
     messagesOpenAi.push(...buildConversationHistory(messages));
-    messagesOpenAi.push({ role: "user", content: transcription.data.text });
+    messagesOpenAi.push({ role: "user", content: transcribedText! });
     const chatParams = {
       model: prompt.model,
       messages: messagesOpenAi,
@@ -815,7 +732,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
     };
     const chat = await openai.createChatCompletion(chatParams);
     let response = chat.data.choices[0].message?.content ?? "";
-    response = await ensureActionMarker(openai, chatParams, response);
+    response = await ensureActionMarker(openai, chatParams, response, Boolean(cpfCnpjNaMensagemAtual));
 
     await registerAiAttendance(ticket, ticket.companyId);
 
