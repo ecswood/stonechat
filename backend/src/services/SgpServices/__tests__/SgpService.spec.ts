@@ -1,9 +1,15 @@
 jest.mock("axios");
+jest.mock("../../../helpers/SgpOutageAlert", () => ({
+  __esModule: true,
+  notifySgpOutage: jest.fn().mockResolvedValue(undefined)
+}));
 
 // eslint-disable-next-line import/first
 import axios from "axios";
 // eslint-disable-next-line import/first
 import SgpService from "../SgpService";
+// eslint-disable-next-line import/first
+import { notifySgpOutage } from "../../../helpers/SgpOutageAlert";
 
 describe("SgpService.consultarCliente", () => {
   beforeEach(() => {
@@ -322,5 +328,64 @@ describe("SgpService.liberarConfianca", () => {
       mensagem: "Não foi possível processar a liberação no momento"
     });
     expect(axios.post).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("SgpService - alerta de indisponibilidade", () => {
+  beforeEach(async () => {
+    jest.clearAllMocks();
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+
+    // O contador de falhas consecutivas vive no módulo SgpService (não é
+    // resetado entre describes deste arquivo - resetModules está desligado
+    // no jest.config.js). Os describes anteriores terminam com uma chamada
+    // que falha (ex: "retorna motivo 'erro' pra falha de rede/timeout"),
+    // então sem isso o contador chegaria aqui já em 1 e os testes abaixo
+    // disparariam o alerta um ciclo antes do esperado. Uma chamada de
+    // sucesso zera o contador antes de cada teste, sem tocar produção.
+    (axios.post as jest.Mock).mockResolvedValueOnce({ data: { contratos: [] } });
+    await SgpService.consultarCliente("__reset_contador__");
+    jest.clearAllMocks();
+  });
+
+  it("dispara o alerta ao acumular 3 falhas seguidas, contando as 3 funções juntas", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(SgpService.consultarCliente("111")).rejects.toThrow();
+    await expect(SgpService.buscarBoleto("222")).rejects.toThrow();
+    expect(notifySgpOutage).not.toHaveBeenCalled();
+
+    await SgpService.liberarConfianca("333", "senha", 1);
+
+    expect(notifySgpOutage).toHaveBeenCalledTimes(1);
+  });
+
+  it("zera o contador de falhas em qualquer sucesso, evitando disparar o alerta com falhas não-seguidas", async () => {
+    (axios.post as jest.Mock)
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockRejectedValueOnce(new Error("timeout"));
+    await expect(SgpService.consultarCliente("111")).rejects.toThrow();
+
+    (axios.post as jest.Mock).mockResolvedValueOnce({ data: { titulos: [] } });
+    await SgpService.buscarBoleto("222");
+
+    (axios.post as jest.Mock)
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockRejectedValueOnce(new Error("timeout"));
+    await SgpService.liberarConfianca("333", "senha", 1);
+
+    expect(notifySgpOutage).not.toHaveBeenCalled();
+  });
+
+  it("não repete o alerta em falhas subsequentes depois de já ter cruzado 3 seguidas", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(SgpService.consultarCliente("1")).rejects.toThrow();
+    await expect(SgpService.buscarBoleto("2")).rejects.toThrow();
+    await SgpService.liberarConfianca("3", "senha", 1);
+    await expect(SgpService.consultarCliente("4")).rejects.toThrow();
+
+    expect(notifySgpOutage).toHaveBeenCalledTimes(1);
   });
 });

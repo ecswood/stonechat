@@ -1,6 +1,7 @@
 import axios from "axios";
 import * as Sentry from "@sentry/node";
 import { logger } from "../../utils/logger";
+import { notifySgpOutage } from "../../helpers/SgpOutageAlert";
 
 export interface SgpCliente {
   nome: string;
@@ -31,8 +32,11 @@ const SGP_TIMEOUT_MS = 8000;
 
 // Pedido do Edison: falha isolada do SGP (timeout, instabilidade momentânea)
 // não deve incomodar o cliente na hora - tenta mais uma vez automaticamente
-// antes de desistir. Contador de falhas consecutivas e alerta de
-// indisponibilidade ficam pendurados aqui pela Task 3 deste plano.
+// antes de desistir. Contador de falhas consecutivas conta as 3 funções
+// juntas (consultarCliente, buscarBoleto, liberarConfianca) e zera em
+// qualquer sucesso - ao cruzar SGP_ALERT_THRESHOLD falhas seguidas, avisa o
+// grupo de monitoramento via notifySgpOutage (Task 3 deste plano).
+const SGP_ALERT_THRESHOLD = 3;
 let consecutiveFailures = 0;
 
 const withRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
@@ -47,6 +51,9 @@ const withRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
     }
   }
   consecutiveFailures += 1;
+  if (consecutiveFailures === SGP_ALERT_THRESHOLD) {
+    await notifySgpOutage();
+  }
   throw lastError;
 };
 
