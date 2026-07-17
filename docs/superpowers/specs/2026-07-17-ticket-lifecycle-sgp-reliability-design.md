@@ -27,13 +27,15 @@
 `FindOrCreateTicketService.ts` tem duas buscas que podem reaproveitar um ticket fechado:
 
 1. **Busca principal** (linha ~23-33): filtra `status: ["open", "pending", "closed"]` — inclui `closed` de propósito (hoje), fazendo qualquer ticket antigo do contato voltar à vida, não importa há quanto tempo foi fechado.
-2. **Busca de repescagem pra contato não-grupo** (linha ~73-101): roda só quando a busca principal não encontra nada; procura qualquer ticket do contato atualizado nas últimas 2 horas, **sem filtrar por status** — reabriria até um ticket fechado há 5 minutos. Essa busca também referencia uma configuração (`Setting` de chave `"timeCreateNewTicket"`) que é lida mas nunca usada (`value` computado e descartado) — resto de uma implementação anterior nunca terminada.
+2. **Busca de repescagem pra contato não-grupo** (linha ~73-101): roda só quando a busca principal não encontra nada; procura qualquer ticket do contato atualizado nas últimas 2 horas, **sem filtrar por status** — reabriria até um ticket fechado há 5 minutos.
+
+Existe também um bloco separado só pra `groupContact` (linha ~43-71, grupos de WhatsApp) com sua própria busca sem filtro de status/tempo, incluindo uma leitura morta de `Setting` (`"timeCreateNewTicket"`, valor lido mas nunca usado) — resto de uma implementação anterior nunca terminada. Esse bloco fica **fora de escopo** deste pedido (grupos de WhatsApp não fazem parte disso) — não mexer nele, dead code incluído.
 
 ### Mudança
 
 - Busca principal: `status: ["open", "pending"]` (remove `"closed"`).
-- Busca de repescagem: adicionar o mesmo filtro de status (`["open", "pending"]`), garantindo que ela nunca reabra um `closed` mesmo dentro da janela de 2h. A leitura morta de `timeCreateNewTicket` pode ser removida junto (não tem efeito hoje e não faz parte do design novo).
-- Nenhuma mudança na busca específica de `groupContact` (linha ~43-65) — grupos de WhatsApp não fazem parte deste pedido.
+- Busca de repescagem (não-grupo): adicionar o mesmo filtro de status (`["open", "pending"]`), garantindo que ela nunca reabra um `closed` mesmo dentro da janela de 2h.
+- Nenhuma mudança no bloco de `groupContact` (linha ~43-71) — inclusive a leitura morta de `timeCreateNewTicket` fica como está, por não fazer parte deste pedido.
 
 ### Efeito
 
