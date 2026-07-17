@@ -52,7 +52,10 @@ const withRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
   }
   consecutiveFailures += 1;
   if (consecutiveFailures === SGP_ALERT_THRESHOLD) {
-    await notifySgpOutage();
+    // Fire-and-forget: notifySgpOutage() nunca lança (try/catch interno),
+    // mas mesmo assim não bloqueamos a resposta ao cliente que já esperou
+    // pelos retries só pra aguardar o alerta ao grupo de monitoramento.
+    void notifySgpOutage();
   }
   throw lastError;
 };
