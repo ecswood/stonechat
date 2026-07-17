@@ -36,20 +36,18 @@ const SGP_TIMEOUT_MS = 8000;
 let consecutiveFailures = 0;
 
 const withRetry = async <T>(fn: () => Promise<T>): Promise<T> => {
-  try {
-    const result = await fn();
-    consecutiveFailures = 0;
-    return result;
-  } catch {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
     try {
       const result = await fn();
       consecutiveFailures = 0;
       return result;
     } catch (err) {
-      consecutiveFailures += 1;
-      throw err;
+      lastError = err;
     }
   }
+  consecutiveFailures += 1;
+  throw lastError;
 };
 
 const consultarCliente = async (
