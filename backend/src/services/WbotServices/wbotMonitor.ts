@@ -16,6 +16,7 @@ import { logger } from "../../utils/logger";
 import createOrUpdateBaileysService from "../BaileysServices/CreateOrUpdateBaileysService";
 import CreateMessageService from "../MessageServices/CreateMessageService";
 import Company from "../../models/Company";
+import { getBrasiliaParts } from "../../helpers/GreetingByTime";
 
 type Session = WASocket & {
   id?: number;
@@ -77,9 +78,7 @@ const wbotMonitor = async (
           // se não existir o ticket não faz nada.
           if (!ticket) return;
 
-          const date = new Date();
-          const hours = date.getHours();
-          const minutes = date.getMinutes();
+          const { hour: hours, minute: minutes } = getBrasiliaParts();
 
           const body = `Chamada de voz/vídeo perdida às ${hours}:${minutes}`;
           const messageData = {
