@@ -26,6 +26,7 @@ import CreateMessageService from "../MessageServices/CreateMessageService";
 import { logger } from "../../utils/logger";
 import CreateOrUpdateContactService from "../ContactServices/CreateOrUpdateContactService";
 import FindOrCreateTicketService from "../TicketServices/FindOrCreateTicketService";
+import ShowTicketService from "../TicketServices/ShowTicketService";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import UpdateTicketService from "../TicketServices/UpdateTicketService";
 import formatBody from "../../helpers/Mustache";
@@ -70,6 +71,7 @@ import {
   clearAwaitingFeedback
 } from "../../helpers/RatingFeedbackWaitTag";
 import UserRating from "../../models/UserRating";
+import SendWhatsAppMessage from "./SendWhatsAppMessage";
 import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 import shouldProcessMessage from "../../helpers/MessageDedup";
 import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticPhotoTrigger";
@@ -1741,7 +1743,14 @@ const handleMessage = async (
         if (verifyRating(candidateTraking, isAiHandledCandidate)) {
           const rate = parseValidRating(bodyMessage);
           if (rate !== null) {
-            await handleRating(rate, closedTicketAwaitingRating, candidateTraking);
+            // handleRating manda mensagem via SendWhatsAppMessage, que
+            // precisa de ticket.contact.number - o Ticket.findOne acima não
+            // carrega essa associação, então busca a versão completa aqui.
+            const fullTicket = await ShowTicketService(
+              closedTicketAwaitingRating.id,
+              companyId
+            );
+            await handleRating(rate, fullTicket, candidateTraking);
             return;
           }
           // Não é uma nota válida (ex: cliente pediu outra coisa, como
@@ -1766,6 +1775,15 @@ const handleMessage = async (
               await latestRating.update({ feedback: bodyMessage });
             }
             await clearAwaitingFeedback(closedTicketAwaitingRating.id, companyId);
+
+            const fullTicket = await ShowTicketService(
+              closedTicketAwaitingRating.id,
+              companyId
+            );
+            await SendWhatsAppMessage({
+              body: "‎Obrigado pelo retorno, vamos trabalhar para melhorar!",
+              ticket: fullTicket
+            });
             return;
           }
         }
