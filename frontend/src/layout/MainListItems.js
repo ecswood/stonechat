@@ -475,6 +475,11 @@ const MainListItems = (props) => {
               primary={i18n.t("mainDrawer.listItems.users")}
               icon={<PeopleAltOutlinedIcon />}
             />
+            <ListItemLink
+              to="/ratings"
+              primary={i18n.t("mainDrawer.listItems.ratings")}
+              icon={<LoyaltyRoundedIcon />}
+            />
             {showExternalApi && (
               <>
                 <ListItemLink

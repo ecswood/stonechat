@@ -16,6 +16,10 @@ jest.mock("../../../helpers/RatingFeedbackWaitTag", () => ({
   __esModule: true,
   markAwaitingFeedback: jest.fn()
 }));
+jest.mock("../../../helpers/LowRatingAlert", () => ({
+  __esModule: true,
+  notifyLowRating: jest.fn()
+}));
 
 // eslint-disable-next-line import/first
 import { getIO } from "../../../libs/socket";
@@ -27,6 +31,8 @@ import ShowWhatsAppService from "../../WhatsappService/ShowWhatsAppService";
 import SendWhatsAppMessage from "../SendWhatsAppMessage";
 // eslint-disable-next-line import/first
 import { markAwaitingFeedback } from "../../../helpers/RatingFeedbackWaitTag";
+// eslint-disable-next-line import/first
+import { notifyLowRating } from "../../../helpers/LowRatingAlert";
 // eslint-disable-next-line import/first
 import { verifyRating, handleRating, parseValidRating } from "../RatingHandler";
 
@@ -90,7 +96,7 @@ describe("handleRating", () => {
     whatsappId: 4,
     status: "pending",
     queueId: null,
-    contact: {},
+    contact: { name: "Cliente Teste" },
     update: jest.fn().mockResolvedValue(undefined)
   } as any;
   const ticketTraking = {
@@ -201,6 +207,24 @@ describe("handleRating", () => {
     await handleRating(3, ticket, ticketTraking);
 
     expect(markAwaitingFeedback).not.toHaveBeenCalled();
+  });
+
+  it("avisa o Edison quando a nota é 1 (Insatisfeito)", async () => {
+    await handleRating(1, ticket, ticketTraking);
+
+    expect(notifyLowRating).toHaveBeenCalledWith(1, "Cliente Teste", null);
+  });
+
+  it("avisa o Edison quando a nota é 2 (Satisfeito)", async () => {
+    await handleRating(2, ticket, ticketTraking);
+
+    expect(notifyLowRating).toHaveBeenCalledWith(2, "Cliente Teste", null);
+  });
+
+  it("não avisa o Edison quando a nota é 3 (Muito Satisfeito) ou mais", async () => {
+    await handleRating(3, ticket, ticketTraking);
+
+    expect(notifyLowRating).not.toHaveBeenCalled();
   });
 
   it("manda a mensagem específica da nota E a mensagem de conclusão configurada (não substitui uma pela outra)", async () => {

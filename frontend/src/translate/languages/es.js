@@ -832,6 +832,7 @@ const messages = {
           tags: "Etiquetas",
           administration: "Administración",
           users: "Usuarios",
+          ratings: "Evaluaciones",
           settings: "Configuraciones",
           helps: "Ayuda",
           messagesAPI: "API",

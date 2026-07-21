@@ -852,6 +852,7 @@ const messages = {
           tags: "Tags",
           administration: "Administração",
           users: "Usuários",
+          ratings: "Avaliações",
           settings: "Configurações",
           helps: "Ajuda",
           messagesAPI: "API",

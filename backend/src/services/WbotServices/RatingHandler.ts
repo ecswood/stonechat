@@ -7,6 +7,7 @@ import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import formatBody from "../../helpers/Mustache";
 import SendWhatsAppMessage from "./SendWhatsAppMessage";
 import { markAwaitingFeedback } from "../../helpers/RatingFeedbackWaitTag";
+import { notifyLowRating } from "../../helpers/LowRatingAlert";
 
 // Pedido do Edison: além da mensagem de conclusão genérica da empresa (que
 // continua sendo enviada, não é substituída), a IA reage à nota específica
@@ -83,6 +84,10 @@ export const handleRating = async (
 
   if (finalRate <= 1) {
     await markAwaitingFeedback(ticket.id, ticket.companyId);
+  }
+
+  if (finalRate <= 2) {
+    await notifyLowRating(finalRate, ticket.contact?.name, null);
   }
 
   if (complationMessage) {

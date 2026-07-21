@@ -72,6 +72,7 @@ import {
 } from "../../helpers/RatingFeedbackWaitTag";
 import UserRating from "../../models/UserRating";
 import SendWhatsAppMessage from "./SendWhatsAppMessage";
+import { notifyLowRating } from "../../helpers/LowRatingAlert";
 import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 import shouldProcessMessage from "../../helpers/MessageDedup";
 import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticPhotoTrigger";
@@ -1784,6 +1785,7 @@ const handleMessage = async (
               body: "‎Obrigado pelo retorno, vamos trabalhar para melhorar!",
               ticket: fullTicket
             });
+            await notifyLowRating(1, fullTicket.contact?.name, bodyMessage);
             return;
           }
         }

@@ -825,6 +825,7 @@ const messages = {
 					tags: "Tags",
 					administration: "Administration",
 					users: "Users",
+					ratings: "Ratings",
 					settings: "Settings",
 					helps: "Help",
 					messagesAPI: "API",
