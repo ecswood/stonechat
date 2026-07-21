@@ -7,7 +7,8 @@ import {
     PrimaryKey,
     ForeignKey,
     BelongsTo,
-    AutoIncrement
+    AutoIncrement,
+    DataType
   } from "sequelize-typescript";
 
   import Company from "./Company";
@@ -46,7 +47,10 @@ import {
   
     @Column
     rate: number;
-  
+
+    @Column(DataType.TEXT)
+    feedback: string;
+
     @CreatedAt
     createdAt: Date;
   

@@ -6,6 +6,20 @@ import UserRating from "../../models/UserRating";
 import ShowWhatsAppService from "../WhatsappService/ShowWhatsAppService";
 import formatBody from "../../helpers/Mustache";
 import SendWhatsAppMessage from "./SendWhatsAppMessage";
+import { markAwaitingFeedback } from "../../helpers/RatingFeedbackWaitTag";
+
+// Pedido do Edison: além da mensagem de conclusão genérica da empresa (que
+// continua sendo enviada, não é substituída), a IA reage à nota específica
+// que o cliente deu na pesquisa de satisfação.
+const ratingReplyMessage = (finalRate: number): string => {
+  if (finalRate <= 1) {
+    return "Sinto muito que não tenha ficado satisfeito. O que poderíamos melhorar?";
+  }
+  if (finalRate === 2) {
+    return "Obrigado pelo retorno! Estamos sempre melhorando para te atender ainda melhor.";
+  }
+  return "Obrigado pela sua avaliação!";
+};
 
 export const verifyRating = (
   ticketTraking: TicketTraking,
@@ -61,6 +75,15 @@ export const handleRating = async (
     userId: ticketTraking.userId,
     rate: finalRate
   });
+
+  await SendWhatsAppMessage({
+    body: `‎${ratingReplyMessage(finalRate)}`,
+    ticket
+  });
+
+  if (finalRate <= 1) {
+    await markAwaitingFeedback(ticket.id, ticket.companyId);
+  }
 
   if (complationMessage) {
     const body = formatBody(`\u200e${complationMessage}`, ticket.contact);

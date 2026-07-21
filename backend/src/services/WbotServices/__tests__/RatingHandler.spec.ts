@@ -12,6 +12,10 @@ jest.mock("../../../helpers/Mustache", () => ({
   default: jest.fn((body: string) => body)
 }));
 jest.mock("../SendWhatsAppMessage", () => ({ __esModule: true, default: jest.fn() }));
+jest.mock("../../../helpers/RatingFeedbackWaitTag", () => ({
+  __esModule: true,
+  markAwaitingFeedback: jest.fn()
+}));
 
 // eslint-disable-next-line import/first
 import { getIO } from "../../../libs/socket";
@@ -21,6 +25,8 @@ import UserRating from "../../../models/UserRating";
 import ShowWhatsAppService from "../../WhatsappService/ShowWhatsAppService";
 // eslint-disable-next-line import/first
 import SendWhatsAppMessage from "../SendWhatsAppMessage";
+// eslint-disable-next-line import/first
+import { markAwaitingFeedback } from "../../../helpers/RatingFeedbackWaitTag";
 // eslint-disable-next-line import/first
 import { verifyRating, handleRating, parseValidRating } from "../RatingHandler";
 
@@ -158,5 +164,56 @@ describe("handleRating", () => {
     expect(UserRating.create).toHaveBeenCalledWith(
       expect.objectContaining({ rate: 1 })
     );
+  });
+
+  it("agradece a avaliação quando a nota é 3 (Muito Satisfeito)", async () => {
+    await handleRating(3, ticket, ticketTraking);
+
+    expect(SendWhatsAppMessage).toHaveBeenCalledWith({
+      body: expect.stringContaining("brigad"),
+      ticket
+    });
+  });
+
+  it("diz que está sempre melhorando quando a nota é 2 (Satisfeito)", async () => {
+    await handleRating(2, ticket, ticketTraking);
+
+    expect(SendWhatsAppMessage).toHaveBeenCalledWith({
+      body: expect.stringContaining("melhorando"),
+      ticket
+    });
+  });
+
+  it("pergunta o que poderia melhorar e marca aguardando feedback quando a nota é 1 (Insatisfeito)", async () => {
+    await handleRating(1, ticket, ticketTraking);
+
+    expect(SendWhatsAppMessage).toHaveBeenCalledWith({
+      body: expect.stringContaining("melhorar"),
+      ticket
+    });
+    expect(markAwaitingFeedback).toHaveBeenCalledWith(
+      ticket.id,
+      ticket.companyId
+    );
+  });
+
+  it("não marca aguardando feedback quando a nota não é 1", async () => {
+    await handleRating(3, ticket, ticketTraking);
+
+    expect(markAwaitingFeedback).not.toHaveBeenCalled();
+  });
+
+  it("manda a mensagem específica da nota E a mensagem de conclusão configurada (não substitui uma pela outra)", async () => {
+    (ShowWhatsAppService as jest.Mock).mockResolvedValue({
+      complationMessage: "Obrigado pelo contato!"
+    });
+
+    await handleRating(3, ticket, ticketTraking);
+
+    expect(SendWhatsAppMessage).toHaveBeenCalledTimes(2);
+    expect(SendWhatsAppMessage).toHaveBeenCalledWith({
+      body: "‎Obrigado pelo contato!",
+      ticket
+    });
   });
 });

@@ -65,6 +65,11 @@ import {
   transferToQueueByName
 } from "./AiAgentActions";
 import { verifyRating, handleRating, parseValidRating } from "./RatingHandler";
+import {
+  getAwaitingFeedbackSince,
+  clearAwaitingFeedback
+} from "../../helpers/RatingFeedbackWaitTag";
+import UserRating from "../../models/UserRating";
 import IsBlockedNumber from "../../helpers/IsBlockedNumber";
 import shouldProcessMessage from "../../helpers/MessageDedup";
 import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticPhotoTrigger";
@@ -1743,6 +1748,26 @@ const handleMessage = async (
           // "desvincular", enquanto a avaliação está pendente) - não
           // intercepta, deixa cair no fluxo normal abaixo (que cria um
           // ticket novo, já que o anterior está fechado).
+        } else {
+          // Nota 1 (Insatisfeito) já registrada - IA perguntou o que
+          // poderíamos melhorar e está aguardando essa resposta específica
+          // (ver RatingFeedbackWaitTag/RatingHandler). Se não vier em 10min,
+          // AutoCloseAfterWaitQueue limpa a tag sozinho.
+          const awaitingFeedbackSince = await getAwaitingFeedbackSince(
+            closedTicketAwaitingRating.id,
+            companyId
+          );
+          if (awaitingFeedbackSince) {
+            const latestRating = await UserRating.findOne({
+              where: { ticketId: closedTicketAwaitingRating.id },
+              order: [["id", "DESC"]]
+            });
+            if (latestRating) {
+              await latestRating.update({ feedback: bodyMessage });
+            }
+            await clearAwaitingFeedback(closedTicketAwaitingRating.id, companyId);
+            return;
+          }
         }
       }
     }
