@@ -1704,6 +1704,49 @@ const handleMessage = async (
       return;
     }
 
+    if (!isGroup && !msg.key.fromMe) {
+      // Verifica ANTES de achar/criar o ticket: como um ticket fechado nunca é
+      // reaproveitado (ticket novo após fechamento), a resposta da avaliação
+      // (que chega com o ticket original já "closed") precisa ser interceptada
+      // aqui - senão FindOrCreateTicketService já cria um ticket novo antes da
+      // checagem de avaliação rodar, e a nota do cliente nunca é registrada.
+      const closedTicketAwaitingRating = await Ticket.findOne({
+        where: {
+          status: "closed",
+          contactId: contact.id,
+          companyId,
+          whatsappId: wbot.id!
+        },
+        order: [["id", "DESC"]]
+      });
+
+      if (closedTicketAwaitingRating) {
+        const candidateTraking = await FindOrCreateATicketTrakingService({
+          ticketId: closedTicketAwaitingRating.id,
+          companyId,
+          whatsappId: whatsapp?.id
+        });
+
+        const isAiHandledCandidate =
+          candidateTraking.finishedAt === null &&
+          candidateTraking.ratingAt !== null
+            ? await isAiHandledTicket(closedTicketAwaitingRating.id, companyId)
+            : false;
+
+        if (verifyRating(candidateTraking, isAiHandledCandidate)) {
+          const rate = parseValidRating(bodyMessage);
+          if (rate !== null) {
+            await handleRating(rate, closedTicketAwaitingRating, candidateTraking);
+            return;
+          }
+          // Não é uma nota válida (ex: cliente pediu outra coisa, como
+          // "desvincular", enquanto a avaliação está pendente) - não
+          // intercepta, deixa cair no fluxo normal abaixo (que cria um
+          // ticket novo, já que o anterior está fechado).
+        }
+      }
+    }
+
     const ticket = await FindOrCreateTicketService(
       contact,
       wbot.id!,
@@ -1731,33 +1774,6 @@ const handleMessage = async (
       companyId,
       whatsappId: whatsapp?.id
     });
-
-    try {
-      if (!msg.key.fromMe) {
-        const canBeRatingReply =
-          ticketTraking !== null &&
-          ticketTraking.finishedAt === null &&
-          ticketTraking.ratingAt !== null;
-
-        const isAiHandled = canBeRatingReply
-          ? await isAiHandledTicket(ticket.id, companyId)
-          : false;
-
-        if (ticketTraking !== null && verifyRating(ticketTraking, isAiHandled)) {
-          const rate = parseValidRating(bodyMessage);
-          if (rate !== null) {
-            await handleRating(rate, ticket, ticketTraking);
-            return;
-          }
-          // Não é uma nota válida (ex: cliente pediu outra coisa, como
-          // "desvincular", enquanto a avaliação está pendente) - não
-          // descarta a mensagem, deixa seguir pro atendimento normal.
-        }
-      }
-    } catch (e) {
-      Sentry.captureException(e);
-      console.log(e);
-    }
 
     // Atualiza o ticket se a ultima mensagem foi enviada por mim, para que possa ser finalizado.
     try {
