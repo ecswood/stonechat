@@ -53,9 +53,28 @@ describe("ListTicketsServicePipeline", () => {
     expect(Ticket.findAll).toHaveBeenNthCalledWith(
       3,
       expect.objectContaining({
-        where: { companyId: 1, status: "open", userId: { [Op.ne]: null } }
+        where: {
+          companyId: 1,
+          status: { [Op.ne]: "closed" },
+          userId: { [Op.ne]: null }
+        }
       })
     );
+  });
+
+  it("inclui em Atendendo tickets com userId setado mesmo com status pending, não só open (regressão real 2026-08-25: ticket sumia das 3 colunas)", async () => {
+    (Ticket.findAll as jest.Mock)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ id: 119, status: "pending", userId: 2 }]);
+
+    const result = await ListTicketsServicePipeline({
+      companyId: 1,
+      profile: "admin",
+      queueIds: []
+    });
+
+    expect(result.atendendo).toEqual([{ id: 119, status: "pending", userId: 2 }]);
   });
 
   it("não filtra Aguardando por setor quando o perfil é admin", async () => {

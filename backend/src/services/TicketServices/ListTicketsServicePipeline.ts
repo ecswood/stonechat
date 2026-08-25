@@ -60,8 +60,20 @@ const ListTicketsServicePipeline = async ({
     order: [["updatedAt", "DESC"]]
   });
 
+  // Antes exigia status "open" - mas um ticket pode ficar atribuído a um
+  // usuário (userId setado) e ainda estar "pending" (nunca formalmente
+  // aceito, ex: atribuição automática, ou o botão "Voltar atendimento
+  // para IA" acionado antes do aceite) e nesse caso não aparecia em
+  // NENHUMA das 3 colunas - regressão real 2026-08-25 (ticket do
+  // Fabricio: pending + userId setado + aiTakeover, sumiu da lista).
+  // Qualquer ticket não fechado com userId setado agora conta como
+  // "Atendendo", independente do status exato.
   const atendendo = await Ticket.findAll({
-    where: { companyId, status: "open", userId: { [Op.ne]: null } },
+    where: {
+      companyId,
+      status: { [Op.ne]: "closed" },
+      userId: { [Op.ne]: null }
+    },
     include: includeCondition,
     order: [["updatedAt", "DESC"]]
   });
