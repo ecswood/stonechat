@@ -240,6 +240,22 @@ const useStyles = makeStyles((theme) => ({
     marginLeft: "0px",
   },
 
+  systemNote: {
+    alignItems: "center",
+    textAlign: "center",
+    alignSelf: "center",
+    backgroundColor: "#EDE7F6",
+    margin: "10px",
+    padding: "6px 14px",
+    borderRadius: "10px",
+    boxShadow: "0 1px 1px #b3b3b3",
+  },
+
+  systemNoteText: {
+    color: "#5E35B1",
+    fontSize: 12,
+  },
+
   ackIcons: {
     fontSize: 18,
     verticalAlign: "middle",
@@ -678,6 +694,17 @@ const MessagesList = ({ ticket, ticketId, isGroup }) => {
   const renderMessages = () => {
     if (messagesList.length > 0) {
       const viewMessagesList = messagesList.map((message, index) => {
+
+        if (message.mediaType === "system_note") {
+          return (
+            <React.Fragment key={message.id}>
+              {renderDailyTimestamps(message, index)}
+              <div className={classes.systemNote}>
+                <span className={classes.systemNoteText}>{message.body}</span>
+              </div>
+            </React.Fragment>
+          );
+        }
 
         if (message.mediaType === "call_log") {
           return (

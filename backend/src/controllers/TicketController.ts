@@ -19,6 +19,8 @@ import {
 import GetTicketWbot from "../helpers/GetTicketWbot";
 import formatBody from "../helpers/Mustache";
 import { formatDateBR } from "../helpers/FormatDateBR";
+import CreateMessageService from "../services/MessageServices/CreateMessageService";
+import { v4 as uuidv4 } from "uuid";
 
 type IndexQuery = {
   searchParam: string;
@@ -247,6 +249,14 @@ export const update = async (
 // visual - não usa UpdateTicketService de propósito, pra não mexer em
 // status/fila/usuário. Pausa sozinho assim que o atendente mandar uma
 // mensagem manual (ver MessageController.store/clearAiAttendance).
+//
+// Cria também um aviso na conversa com mediaType "system_note" - pedido do
+// Edison: isso precisa aparecer pro atendente no chat, mas NUNCA pode ser
+// enviado ao cliente de verdade. Por isso não passa pelo wbot (nenhum
+// wbot.sendMessage aqui) - é só um registro local + broadcast via socket
+// (CreateMessageService), e mediaType "system_note" fica de fora do
+// histórico que a IA usa pra montar contexto (ver BuildConversationHistory,
+// que só aceita conversation/extendedTextMessage/audio).
 export const returnToAi = async (
   req: Request,
   res: Response
@@ -257,6 +267,18 @@ export const returnToAi = async (
   const ticket = await ShowTicketService(ticketId, companyId);
   await ticket.update({ aiTakeover: true });
   await registerAiAttendance(ticket, companyId);
+
+  await CreateMessageService({
+    messageData: {
+      id: uuidv4(),
+      ticketId: ticket.id,
+      body: "🤖 Atendimento devolvido para a IA (visível só para você, o cliente não vê isso)",
+      fromMe: true,
+      read: true,
+      mediaType: "system_note"
+    },
+    companyId
+  });
 
   return res.status(200).json(ticket);
 };
