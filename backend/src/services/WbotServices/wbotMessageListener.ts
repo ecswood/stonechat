@@ -99,6 +99,16 @@ interface SessionOpenAi extends OpenAIApi {
 }
 const sessionsOpenAi: SessionOpenAi[] = [];
 
+// Pedido do Edison (2026-08-25): quando o cliente manda fotos dos
+// equipamentos, ele geralmente manda várias, uma mensagem por foto - o
+// código antigo disparava "vou te transferir..." e a transferência de
+// verdade já na PRIMEIRA foto, sem esperar as outras chegarem. Agora
+// espera um período de silêncio (nenhuma foto nova) antes de agir; cada
+// foto nova reinicia a contagem. Mapa em memória (ticketId -> timer), não
+// precisa sobreviver a um restart do processo.
+const technicalTransferTimers = new Map<number, NodeJS.Timeout>();
+const TECHNICAL_TRANSFER_DEBOUNCE_MS = 20000;
+
 interface ImessageUpsert {
   messages: proto.IWebMessageInfo[];
   type: MessageUpsertType;
@@ -546,6 +556,44 @@ const deleteFileSync = (path: string): void => {
   } catch (error) {
     console.error("Erro ao deletar o arquivo:", error);
   }
+};
+
+// Reinicia o timer de transferência pro suporte técnico a cada foto nova
+// do equipamento - só dispara a mensagem + transferência de verdade depois
+// de TECHNICAL_TRANSFER_DEBOUNCE_MS sem nenhuma foto nova (ver
+// technicalTransferTimers). Recarrega o ticket na hora de disparar, não
+// usa o objeto antigo - se um atendente já pegou o ticket manualmente
+// nesse meio tempo (queueId não é mais null), desiste silenciosamente.
+const scheduleTechnicalTransfer = (
+  wbot: WASocket,
+  remoteJid: string,
+  ticketId: number,
+  contact: Contact,
+  companyId: number
+): void => {
+  const existing = technicalTransferTimers.get(ticketId);
+  if (existing) clearTimeout(existing);
+
+  const timer = setTimeout(async () => {
+    technicalTransferTimers.delete(ticketId);
+    try {
+      const freshTicket = await ShowTicketService(ticketId, companyId);
+      if (freshTicket.queueId !== null) return;
+
+      await wbot.sendMessage(remoteJid, {
+        text: formatBody(
+          "Vou te transferir para um agente de suporte técnico. Por favor, aguarde um instante.",
+          contact
+        )
+      });
+      await transferToQueueByName("Técnico", freshTicket, companyId);
+    } catch (e) {
+      Sentry.captureException(e);
+      console.log(e);
+    }
+  }, TECHNICAL_TRANSFER_DEBOUNCE_MS);
+
+  technicalTransferTimers.set(ticketId, timer);
 };
 
 const keepOnlySpecifiedChars = (str: string) => {
@@ -1849,13 +1897,13 @@ const handleMessage = async (
           ticketQueueIdIsNull: ticket.queueId === null
         })
       ) {
-        await (wbot as WASocket).sendMessage(msg.key.remoteJid!, {
-          text: formatBody(
-            "Vou te transferir para um agente de suporte técnico. Por favor, aguarde um instante.",
-            contact
-          )
-        });
-        await transferToQueueByName("Técnico", ticket, companyId);
+        scheduleTechnicalTransfer(
+          wbot as WASocket,
+          msg.key.remoteJid!,
+          ticket.id,
+          contact,
+          companyId
+        );
       }
     } catch (e) {
       Sentry.captureException(e);
