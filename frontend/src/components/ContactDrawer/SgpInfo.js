@@ -141,6 +141,12 @@ const SgpInfo = ({ contactId }) => {
 						{i18n.t("contactDrawer.sgp.planos")}
 					</Typography>
 
+					{data.cliente.contratos.length === 0 && (
+						<Typography variant="body2" color="textSecondary">
+							{i18n.t("contactDrawer.sgp.semContratoAtivo")}
+						</Typography>
+					)}
+
 					{data.cliente.contratos.map(contrato => (
 						<Paper
 							key={contrato.contratoId}

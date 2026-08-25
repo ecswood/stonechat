@@ -27,7 +27,18 @@ export const showCliente = async (
       });
     }
 
-    return res.json({ vinculado: true, encontrado: true, cliente });
+    // O atendente quer ver só o que está em vigor - contratos
+    // cancelados/suspensos só poluem o painel (pedido do Edison, cliente de
+    // teste dele tem 9 contratos, a maioria já cancelada de testes antigos).
+    const contratosAtivos = cliente.contratos.filter(
+      c => c.status.trim().toLowerCase() === "ativo"
+    );
+
+    return res.json({
+      vinculado: true,
+      encontrado: true,
+      cliente: { ...cliente, contratos: contratosAtivos }
+    });
   } catch (err) {
     logger.error(`[SgpController.showCliente] contactId=${contactId}: ${err}`);
     return res.status(502).json({ vinculado: true, erro: true });

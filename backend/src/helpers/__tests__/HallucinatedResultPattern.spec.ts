@@ -9,7 +9,10 @@ describe("HALLUCINATED_RESULT_PATTERN", () => {
     "esse CPF não está cadastrado em nosso sistema",
     "esse CPF não esta cadastrada aqui",
     "não consta nenhum registro pra esse CPF",
-    "não há cadastro com esse documento"
+    "não há cadastro com esse documento",
+    "o CPF informado não está vinculado ao seu cadastro", // regressão real 2026-08-25: Edison, CPF 68197756953 - IA afirmou isso e, na mesma resposta, a Ação real (Verificar Bloqueio) encontrou o cadastro normalmente
+    "esse CNPJ não está vinculado a nenhum contrato",
+    "não há vínculo com esse CPF em nosso sistema"
   ])("detecta a frase de alucinação em: %s", texto => {
     expect(HALLUCINATED_RESULT_PATTERN.test(texto)).toBe(true);
   });

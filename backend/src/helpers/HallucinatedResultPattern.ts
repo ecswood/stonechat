@@ -5,4 +5,4 @@
 // narração antes de uma Ação já presente (AiAgentActions/dispatchAiAction) -
 // fonte única pra evitar os dois ficarem dessincronizados.
 export const HALLUCINATED_RESULT_PATTERN =
-  /\bn[ãa]o\s+(consegui\s+)?(localiz\w+|encontr\w+|est[áa]\s+cadastrad\w*|consta\w*|h[áa]\s+cadastro)\b/i;
+  /\bn[ãa]o\s+(consegui\s+)?(localiz\w+|encontr\w+|est[áa]\s+(cadastrad\w*|vinculad\w*)|consta\w*|h[áa]\s+(cadastro|v[íi]nculo))\b/i;
