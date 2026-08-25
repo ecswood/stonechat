@@ -30,6 +30,10 @@ jest.mock("../../MessageServices/CreateMessageService", () => ({
   __esModule: true,
   default: jest.fn().mockResolvedValue(undefined)
 }));
+jest.mock("../../../helpers/AiResponseDelay", () => ({
+  __esModule: true,
+  delayAiResponse: jest.fn().mockResolvedValue(undefined)
+}));
 
 // eslint-disable-next-line import/first
 import Tag from "../../../models/Tag";

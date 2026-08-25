@@ -327,7 +327,8 @@ export const sendBoleto = async (
         vencimento
       )}\n*Link do boleto:* ${linkBoleto}${linhaDigitavelTexto}`,
       ticket.contact
-    )
+    ),
+    false
   );
 
   if (pixCopiaCola) {
@@ -336,7 +337,8 @@ export const sendBoleto = async (
       ticket.contact,
       ticket,
       companyId,
-      formatBody(`*PIX Copia e Cola:*\n${pixCopiaCola}`, ticket.contact)
+      formatBody(`*PIX Copia e Cola:*\n${pixCopiaCola}`, ticket.contact),
+      false
     );
   }
 

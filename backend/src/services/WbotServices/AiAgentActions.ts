@@ -16,6 +16,7 @@ import { ACTION_MARKERS, hasAnyActionMarker } from "../../helpers/ActionMarkers"
 import { HALLUCINATED_RESULT_PATTERN } from "../../helpers/HallucinatedResultPattern";
 import CreateMessageService from "../MessageServices/CreateMessageService";
 import resolveAckStatus from "../../helpers/ResolveAckStatus";
+import { delayAiResponse } from "../../helpers/AiResponseDelay";
 import {
   markAwaitingConfirmation,
   clearAwaitingConfirmation
@@ -118,8 +119,13 @@ export const sendAndPersist = async (
   contact: Contact,
   ticket: Ticket,
   companyId: number,
-  text: string
+  text: string,
+  delay: boolean = true
 ): Promise<void> => {
+  // Espaça as respostas da IA (ver AiResponseDelay) - não atrasa envios
+  // manuais do atendente (botão "Enviar boleto"), que passam delay=false.
+  if (delay) await delayAiResponse();
+
   const sentMessage = await wbot.sendMessage(jidOf(contact), { text });
   await CreateMessageService({
     messageData: {

@@ -79,6 +79,7 @@ import shouldTransferToTechnicalSupport from "../../helpers/TechnicalDiagnosticP
 import buildConversationHistory from "../../helpers/BuildConversationHistory";
 import ensureActionMarker from "../../helpers/EnsureActionMarker";
 import { getGreetingForBrasiliaTime } from "../../helpers/GreetingByTime";
+import { delayAiResponse } from "../../helpers/AiResponseDelay";
 import { buildTicketProtocol } from "../../helpers/TicketProtocol";
 import { maskCpfCnpj } from "../../helpers/MaskCpfCnpj";
 import { extractValidCpfCnpj } from "../../helpers/ExtractValidCpfCnpj";
@@ -761,6 +762,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
       ticket.companyId,
       async cleaned => {
         if (cleaned.trim()) {
+          await delayAiResponse();
           const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
             text: cleaned
           });
@@ -770,6 +772,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
     );
 
     if (response.trim()) {
+      await delayAiResponse();
       const sentMessage = await wbot.sendMessage(msg.key.remoteJid!, {
         text: response
       });
@@ -794,6 +797,7 @@ Nunca invente valores de boleto, datas ou resultados de liberação — o sistem
 
     const sendAiAudioReply = async (text: string): Promise<void> => {
       if (!text.trim()) return;
+      await delayAiResponse();
       const fileNameWithOutExtension = `${ticket.id}_${Date.now()}`;
       try {
         const audioBuffer = await synthesizeSpeech(text, prompt.apiKey);
@@ -2372,8 +2376,10 @@ const wbotMessageListener = async (
     wbot.ev.on("messages.update", (messageUpdate: WAMessageUpdate[]) => {
       if (messageUpdate.length === 0) return;
       messageUpdate.forEach(async (message: WAMessageUpdate) => {
-        (wbot as WASocket)!.readMessages([message.key]);
-
+        // Pedido do Edison (2026-08-25): não confirmar leitura pro cliente
+        // (sem check azul) - readMessages() é o que manda essa confirmação
+        // pro WhatsApp. handleMsgAck ainda rastreia o status de ENVIO das
+        // nossas próprias mensagens (✓/✓✓ cinza), que é coisa diferente.
         handleMsgAck(message, message.update.status);
       });
     });
