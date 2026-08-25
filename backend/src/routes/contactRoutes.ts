@@ -49,6 +49,12 @@ contactRoutes.post("/contacts/upload", isAuth, ContactController.storeUpload);
 
 contactRoutes.put("/contacts/:contactId", isAuth, ContactController.update);
 
+contactRoutes.put(
+  "/contacts/:contactId/desvincular-cpf",
+  isAuth,
+  ContactController.desvincularCpf
+);
+
 contactRoutes.delete("/contacts/:contactId", isAuth, ContactController.remove);
 
 export default contactRoutes;

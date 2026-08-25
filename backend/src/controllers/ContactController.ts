@@ -174,6 +174,30 @@ export const update = async (
   return res.status(200).json(contact);
 };
 
+// Botão "Desvincular CPF/CNPJ" do painel do atendente - mesma ação que a
+// IA já faz sozinha (Ação: Desvincular CPF em AiAgentActions.ts), só que
+// disparada manualmente. Não precisa confirmar identidade nem senha aqui:
+// quem decide é o atendente já autenticado no painel, não o cliente pelo
+// WhatsApp.
+export const desvincularCpf = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { contactId } = req.params;
+  const { companyId } = req.user;
+
+  const contact = await ShowContactService(contactId, companyId);
+  await contact.update({ cpfCnpj: null });
+
+  const io = getIO();
+  io.to(`company-${companyId}-mainchannel`).emit(`company-${companyId}-contact`, {
+    action: "update",
+    contact
+  });
+
+  return res.status(200).json(contact);
+};
+
 export const remove = async (
   req: Request,
   res: Response

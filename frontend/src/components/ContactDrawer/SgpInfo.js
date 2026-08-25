@@ -19,6 +19,7 @@ import NetworkCheckIcon from "@material-ui/icons/NetworkCheck";
 import RefreshIcon from "@material-ui/icons/Refresh";
 import DescriptionIcon from "@material-ui/icons/Description";
 import RouterIcon from "@material-ui/icons/Router";
+import LinkOffIcon from "@material-ui/icons/LinkOff";
 import { makeStyles } from "@material-ui/core/styles";
 
 import api from "../../services/api";
@@ -609,6 +610,50 @@ const ResumoDialog = ({ open, onClose, ticketId }) => {
 	);
 };
 
+const DesvincularDialog = ({ open, onClose, contactId, onSuccess }) => {
+	const [loading, setLoading] = useState(false);
+
+	const confirmar = async () => {
+		setLoading(true);
+		try {
+			await api.put(`/contacts/${contactId}/desvincular-cpf`);
+			toast.success(i18n.t("contactDrawer.sgp.desvincularSucesso"));
+			onClose();
+			onSuccess();
+		} catch (err) {
+			toastError(err);
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	return (
+		<Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+			<DialogTitle>{i18n.t("contactDrawer.sgp.desvincularTitulo")}</DialogTitle>
+			<DialogContent>
+				<DialogContentText>
+					{i18n.t("contactDrawer.sgp.desvincularConfirmacao")}
+				</DialogContentText>
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={onClose}>{i18n.t("contactDrawer.sgp.fechar")}</Button>
+				<Button
+					onClick={confirmar}
+					color="primary"
+					variant="contained"
+					disabled={loading}
+				>
+					{loading ? (
+						<CircularProgress size={18} />
+					) : (
+						i18n.t("contactDrawer.sgp.confirmar")
+					)}
+				</Button>
+			</DialogActions>
+		</Dialog>
+	);
+};
+
 const SgpInfo = ({ contactId, ticket }) => {
 	const classes = useStyles();
 	const [loading, setLoading] = useState(true);
@@ -618,30 +663,29 @@ const SgpInfo = ({ contactId, ticket }) => {
 	const [desbloquearOpen, setDesbloquearOpen] = useState(false);
 	const [retornarIaOpen, setRetornarIaOpen] = useState(false);
 	const [resumoOpen, setResumoOpen] = useState(false);
+	const [desvincularOpen, setDesvincularOpen] = useState(false);
 
-	useEffect(() => {
-		if (!contactId) return undefined;
+	const carregarCliente = async () => {
+		if (!contactId) return;
 
-		let active = true;
 		setLoading(true);
 		setData(null);
 
-		(async () => {
-			try {
-				const { data: response } = await api.get(
-					`/contacts/${contactId}/sgp-cliente`
-				);
-				if (active) setData(response);
-			} catch (err) {
-				if (active) setData({ erro: true });
-			} finally {
-				if (active) setLoading(false);
-			}
-		})();
+		try {
+			const { data: response } = await api.get(
+				`/contacts/${contactId}/sgp-cliente`
+			);
+			setData(response);
+		} catch (err) {
+			setData({ erro: true });
+		} finally {
+			setLoading(false);
+		}
+	};
 
-		return () => {
-			active = false;
-		};
+	useEffect(() => {
+		carregarCliente();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [contactId]);
 
 	return (
@@ -778,6 +822,16 @@ const SgpInfo = ({ contactId, ticket }) => {
 							{i18n.t("contactDrawer.sgp.botaoResumo")}
 						</Button>
 					)}
+					{data?.cliente && (
+						<Button
+							size="small"
+							variant="outlined"
+							startIcon={<LinkOffIcon />}
+							onClick={() => setDesvincularOpen(true)}
+						>
+							{i18n.t("contactDrawer.sgp.botaoDesvincular")}
+						</Button>
+					)}
 				</div>
 			)}
 
@@ -811,6 +865,12 @@ const SgpInfo = ({ contactId, ticket }) => {
 					ticketId={ticket.id}
 				/>
 			)}
+			<DesvincularDialog
+				open={desvincularOpen}
+				onClose={() => setDesvincularOpen(false)}
+				contactId={contactId}
+				onSuccess={carregarCliente}
+			/>
 		</Paper>
 	);
 };

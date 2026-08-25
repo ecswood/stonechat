@@ -1587,6 +1587,11 @@ const messages = {
             "IA respondendo por você agora. Mande uma mensagem quando quiser assumir de volta.",
           botaoResumo: "Resumir atendimento",
           resumoTitulo: "Resumo do atendimento",
+          botaoDesvincular: "Desvincular CPF/CNPJ",
+          desvincularTitulo: "Desvincular CPF/CNPJ",
+          desvincularConfirmacao:
+            "Isso vai remover o CPF/CNPJ vinculado a este número de WhatsApp. Na próxima vez que o cliente falar com a IA, ela vai pedir o documento de novo. Confirma?",
+          desvincularSucesso: "CPF/CNPJ desvinculado deste número.",
         },
       },
       fileModal: {
