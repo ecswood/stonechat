@@ -25,6 +25,12 @@ ticketRoutes.put(
   TicketController.returnToAi
 );
 
+ticketRoutes.post(
+  "/tickets/:ticketId/enviar-boleto",
+  isAuth,
+  TicketController.sendBoleto
+);
+
 ticketRoutes.put("/tickets/:ticketId/pull", isAuth, TicketController.pull);
 
 ticketRoutes.delete("/tickets/:ticketId", isAuth, TicketController.remove);

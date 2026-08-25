@@ -12,7 +12,6 @@ import DialogTitle from "@material-ui/core/DialogTitle";
 import DialogContent from "@material-ui/core/DialogContent";
 import DialogContentText from "@material-ui/core/DialogContentText";
 import DialogActions from "@material-ui/core/DialogActions";
-import Link from "@material-ui/core/Link";
 import ReceiptIcon from "@material-ui/icons/Receipt";
 import LockOpenIcon from "@material-ui/icons/LockOpen";
 import AndroidIcon from "@material-ui/icons/Android";
@@ -76,16 +75,8 @@ const useStyles = makeStyles(theme => ({
 	boletoRow: {
 		display: "flex",
 		justifyContent: "space-between",
-		fontSize: 13,
-	},
-	monoValue: {
-		fontFamily: "monospace",
-		fontSize: 12,
-		wordBreak: "break-all",
-		backgroundColor: theme.palette.background.default,
-		padding: 4,
-		borderRadius: 4,
-		marginTop: 4,
+		alignItems: "center",
+		gap: 12,
 	},
 }));
 
@@ -102,25 +93,19 @@ const formatDateBR = iso => {
 	return ano && mes && dia ? `${dia}/${mes}/${ano}` : iso;
 };
 
-const copyToClipboard = async (text, label) => {
-	try {
-		await navigator.clipboard.writeText(text);
-		toast.success(`${label} copiado!`);
-	} catch {
-		toastError({ response: { data: { error: "Não foi possível copiar." } } });
-	}
-};
-
-const BoletosDialog = ({ open, onClose, contactId }) => {
+const BoletosDialog = ({ open, onClose, contactId, ticketId }) => {
 	const classes = useStyles();
 	const [loading, setLoading] = useState(true);
 	const [data, setData] = useState(null);
+	const [enviandoIndex, setEnviandoIndex] = useState(null);
+	const [enviados, setEnviados] = useState({});
 
 	useEffect(() => {
 		if (!open) return;
 
 		setLoading(true);
 		setData(null);
+		setEnviados({});
 
 		(async () => {
 			try {
@@ -136,10 +121,28 @@ const BoletosDialog = ({ open, onClose, contactId }) => {
 		})();
 	}, [open, contactId]);
 
+	const enviar = async (boleto, index) => {
+		setEnviandoIndex(index);
+		try {
+			await api.post(`/tickets/${ticketId}/enviar-boleto`, boleto);
+			toast.success(i18n.t("contactDrawer.sgp.boletoEnviado"));
+			setEnviados(prev => ({ ...prev, [index]: true }));
+		} catch (err) {
+			toastError(err);
+		} finally {
+			setEnviandoIndex(null);
+		}
+	};
+
 	return (
-		<Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+		<Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
 			<DialogTitle>{i18n.t("contactDrawer.sgp.boletosTitulo")}</DialogTitle>
 			<DialogContent>
+				{!loading && !data?.erro && data?.vinculado !== false && data?.boletos?.length > 0 && (
+					<Typography color="textSecondary" style={{ marginBottom: 12 }}>
+						{i18n.t("contactDrawer.sgp.boletosSubtitulo")}
+					</Typography>
+				)}
 				{loading && (
 					<div className={classes.loadingWrapper}>
 						<CircularProgress size={24} />
@@ -161,56 +164,51 @@ const BoletosDialog = ({ open, onClose, contactId }) => {
 					</Typography>
 				)}
 				{!loading &&
-					data?.boletos?.map(boleto => (
+					data?.boletos?.map((boleto, index) => (
 						<Paper
-							key={boleto.linkBoleto || boleto.vencimento}
+							// eslint-disable-next-line react/no-array-index-key
+							key={boleto.linkBoleto || index}
 							variant="outlined"
 							className={classes.boletoCard}
 						>
 							<div className={classes.boletoRow}>
-								<strong>R$ {boleto.valor}</strong>
-								<span>{formatDateBR(boleto.vencimento)}</span>
+								<div>
+									<div>
+										<strong>
+											{i18n.t("contactDrawer.sgp.vencimento")}:{" "}
+											{formatDateBR(boleto.vencimento)}
+										</strong>{" "}
+										<Chip
+											size="small"
+											label={i18n.t("contactDrawer.sgp.emAberto")}
+											style={{ backgroundColor: "#C8E6C9", color: "#1B5E20" }}
+										/>
+									</div>
+									<Typography variant="body2" color="textSecondary">
+										{i18n.t("contactDrawer.sgp.valor")}: R$ {boleto.valor}
+									</Typography>
+								</div>
+								<Button
+									variant="contained"
+									color="primary"
+									size="small"
+									disabled={enviandoIndex === index || enviados[index]}
+									onClick={() => enviar(boleto, index)}
+								>
+									{enviandoIndex === index ? (
+										<CircularProgress size={16} color="inherit" />
+									) : enviados[index] ? (
+										i18n.t("contactDrawer.sgp.enviado")
+									) : (
+										i18n.t("contactDrawer.sgp.enviar")
+									)}
+								</Button>
 							</div>
-							{boleto.linkBoleto && (
-								<Link
-									href={boleto.linkBoleto}
-									target="_blank"
-									rel="noopener noreferrer"
-									style={{ fontSize: 12, display: "block", marginTop: 4 }}
-								>
-									{i18n.t("contactDrawer.sgp.abrirBoleto")}
-								</Link>
-							)}
-							{boleto.linhaDigitavel && (
-								<div
-									className={classes.monoValue}
-									onClick={() =>
-										copyToClipboard(
-											boleto.linhaDigitavel,
-											i18n.t("contactDrawer.sgp.linhaDigitavel")
-										)
-									}
-									style={{ cursor: "pointer" }}
-								>
-									{boleto.linhaDigitavel}
-								</div>
-							)}
-							{boleto.pixCopiaCola && (
-								<div
-									className={classes.monoValue}
-									onClick={() =>
-										copyToClipboard(boleto.pixCopiaCola, "PIX")
-									}
-									style={{ cursor: "pointer" }}
-								>
-									PIX: {boleto.pixCopiaCola}
-								</div>
-							)}
 						</Paper>
 					))}
 			</DialogContent>
 			<DialogActions>
-				<Button onClick={onClose}>{i18n.t("contactDrawer.sgp.fechar")}</Button>
+				<Button onClick={onClose}>{i18n.t("contactDrawer.sgp.cancelar")}</Button>
 			</DialogActions>
 		</Dialog>
 	);
@@ -495,6 +493,7 @@ const SgpInfo = ({ contactId, ticket }) => {
 				open={boletosOpen}
 				onClose={() => setBoletosOpen(false)}
 				contactId={contactId}
+				ticketId={ticket?.id}
 			/>
 			<DesbloquearDialog
 				open={desbloquearOpen}

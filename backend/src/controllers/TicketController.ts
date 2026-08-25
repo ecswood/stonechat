@@ -12,7 +12,13 @@ import UpdateTicketService from "../services/TicketServices/UpdateTicketService"
 import ListTicketsServiceKanban from "../services/TicketServices/ListTicketsServiceKanban";
 import PullTicketService from "../services/TicketServices/PullTicketService";
 import ListTicketsServicePipeline from "../services/TicketServices/ListTicketsServicePipeline";
-import { registerAiAttendance } from "../services/WbotServices/AiAgentActions";
+import {
+  registerAiAttendance,
+  sendAndPersist
+} from "../services/WbotServices/AiAgentActions";
+import GetTicketWbot from "../helpers/GetTicketWbot";
+import formatBody from "../helpers/Mustache";
+import { formatDateBR } from "../helpers/FormatDateBR";
 
 type IndexQuery = {
   searchParam: string;
@@ -269,6 +275,63 @@ export const returnToAi = async (
   await registerAiAttendance(ticket, companyId);
 
   return res.status(200).json(ticket);
+};
+
+// Botão "Enviar" no diálogo de boletos do atendente - manda a mesma
+// mensagem que a IA manda (handleBuscarBoletoAction), só que pro boleto
+// específico escolhido, não pro de vencimento mais próximo. Recebe os
+// dados do boleto do próprio front (ele já tem a lista carregada), não
+// consulta o SGP de novo aqui.
+export const sendBoleto = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { ticketId } = req.params;
+  const { companyId } = req.user;
+  const { valor, vencimento, linkBoleto, linhaDigitavel, pixCopiaCola } =
+    req.body as {
+      valor?: string;
+      vencimento?: string;
+      linkBoleto?: string;
+      linhaDigitavel?: string | null;
+      pixCopiaCola?: string | null;
+    };
+
+  if (!valor || !vencimento || !linkBoleto) {
+    throw new AppError("ERR_INVALID_BOLETO_DATA", 400);
+  }
+
+  const ticket = await ShowTicketService(ticketId, companyId);
+  const wbot = await GetTicketWbot(ticket);
+
+  const linhaDigitavelTexto = linhaDigitavel
+    ? `\n*Linha digitável:* ${linhaDigitavel}`
+    : "";
+
+  await sendAndPersist(
+    wbot,
+    ticket.contact,
+    ticket,
+    companyId,
+    formatBody(
+      `Segue sua fatura:\n\n*Valor:* R$ ${valor}\n*Vencimento:* ${formatDateBR(
+        vencimento
+      )}\n*Link do boleto:* ${linkBoleto}${linhaDigitavelTexto}`,
+      ticket.contact
+    )
+  );
+
+  if (pixCopiaCola) {
+    await sendAndPersist(
+      wbot,
+      ticket.contact,
+      ticket,
+      companyId,
+      formatBody(`*PIX Copia e Cola:*\n${pixCopiaCola}`, ticket.contact)
+    );
+  }
+
+  return res.status(200).json({ enviado: true });
 };
 
 export const pull = async (

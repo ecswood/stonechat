@@ -97,7 +97,7 @@ const jidOf = (contact: Contact): string => `${contact.number}@s.whatsapp.net`;
 // SendWhatsAppMessage.ts - aparecendo antes do conteúdo real que foi enviado
 // primeiro). Toda mensagem que a IA manda neste arquivo passa por aqui e
 // salva na hora, na ordem real de envio - elimina a corrida e a perda.
-const sendAndPersist = async (
+export const sendAndPersist = async (
   wbot: WASocket,
   contact: Contact,
   ticket: Ticket,
