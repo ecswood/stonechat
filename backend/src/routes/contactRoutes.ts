@@ -25,6 +25,18 @@ contactRoutes.get(
   SgpController.showCliente
 );
 
+contactRoutes.get(
+  "/contacts/:contactId/sgp-boletos",
+  isAuth,
+  SgpController.listBoletos
+);
+
+contactRoutes.post(
+  "/contacts/:contactId/sgp-desbloquear",
+  isAuth,
+  SgpController.desbloquear
+);
+
 contactRoutes.post("/contacts", isAuth, ContactController.store);
 
 contactRoutes.post("/contacts/upload", isAuth, ContactController.storeUpload);

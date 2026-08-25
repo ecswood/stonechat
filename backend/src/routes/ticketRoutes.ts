@@ -19,6 +19,12 @@ ticketRoutes.post("/tickets", isAuth, TicketController.store);
 
 ticketRoutes.put("/tickets/:ticketId", isAuth, TicketController.update);
 
+ticketRoutes.put(
+  "/tickets/:ticketId/retornar-ia",
+  isAuth,
+  TicketController.returnToAi
+);
+
 ticketRoutes.put("/tickets/:ticketId/pull", isAuth, TicketController.pull);
 
 ticketRoutes.delete("/tickets/:ticketId", isAuth, TicketController.remove);

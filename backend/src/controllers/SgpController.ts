@@ -44,3 +44,63 @@ export const showCliente = async (
     return res.status(502).json({ vinculado: true, erro: true });
   }
 };
+
+export const listBoletos = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { contactId } = req.params;
+  const { companyId } = req.user;
+
+  const contact = await ShowContactService(contactId, companyId);
+
+  if (!contact.cpfCnpj) {
+    return res.json({ vinculado: false });
+  }
+
+  try {
+    const boletos = await SgpService.listarBoletosAbertos(contact.cpfCnpj);
+    return res.json({ vinculado: true, boletos });
+  } catch (err) {
+    logger.error(`[SgpController.listBoletos] contactId=${contactId}: ${err}`);
+    return res.status(502).json({ vinculado: true, erro: true });
+  }
+};
+
+// Desbloqueio por "liberação de confiança" - mesmo mecanismo que a IA já usa
+// no WhatsApp (promessa de pagamento no SGP), só que disparado manualmente
+// pelo atendente em vez de por uma frase de Ação da IA. Age sobre o
+// contrato "principal" do cliente (o primeiro retornado pelo SGP), igual ao
+// fluxo da IA - não há seleção de contrato específico aqui.
+export const desbloquear = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { contactId } = req.params;
+  const { companyId } = req.user;
+
+  const contact = await ShowContactService(contactId, companyId);
+
+  if (!contact.cpfCnpj) {
+    return res.json({ vinculado: false });
+  }
+
+  try {
+    const cliente = await SgpService.consultarCliente(contact.cpfCnpj);
+
+    if (!cliente) {
+      return res.json({ vinculado: true, encontrado: false });
+    }
+
+    const resultado = await SgpService.liberarConfianca(
+      contact.cpfCnpj,
+      cliente.centralSenha,
+      cliente.contratoId
+    );
+
+    return res.json({ vinculado: true, encontrado: true, resultado });
+  } catch (err) {
+    logger.error(`[SgpController.desbloquear] contactId=${contactId}: ${err}`);
+    return res.status(502).json({ vinculado: true, erro: true });
+  }
+};

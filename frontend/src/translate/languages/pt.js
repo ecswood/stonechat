@@ -1547,6 +1547,24 @@ const messages = {
           naoVinculado: "Este contato não tem CPF/CNPJ vinculado.",
           naoEncontrado: "Nenhum cadastro localizado no SGP para este CPF/CNPJ.",
           erro: "Não foi possível consultar o SGP agora.",
+          fechar: "Fechar",
+          confirmar: "Confirmar",
+          botaoBoletos: "Ver boletos em aberto",
+          botaoDesbloquear: "Desbloquear serviço",
+          botaoRetornarIa: "Voltar atendimento para IA",
+          boletosTitulo: "Boletos em aberto",
+          semBoletos: "Nenhum boleto em aberto no momento.",
+          abrirBoleto: "Abrir boleto",
+          linhaDigitavel: "Linha digitável",
+          desbloquearTitulo: "Desbloquear serviço",
+          desbloquearConfirmacao:
+            "Isso vai acionar a liberação por confiança do cliente no SGP (mesma liberação que a IA faz no WhatsApp). Confirma?",
+          desbloqueadoSucesso:
+            "Liberado até {{data}}. Protocolo: {{protocolo}}",
+          retornarIaTitulo: "Voltar atendimento para IA",
+          retornarIaConfirmacao:
+            "Isso vai tirar este ticket do seu atendimento e devolver para a IA responder. Confirma?",
+          retornarIaSucesso: "Ticket devolvido para a IA.",
         },
       },
       fileModal: {

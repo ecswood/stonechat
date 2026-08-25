@@ -317,6 +317,86 @@ describe("SgpService.buscarBoleto", () => {
   });
 });
 
+describe("SgpService.listarBoletosAbertos", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("retorna todos os títulos em aberto, ordenados por vencimento (diferente de buscarBoleto, que devolve só o mais próximo)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        titulos: [
+          {
+            id: 90001,
+            link: "https://snitelecom.sgp.net.br/boleto/futuro/",
+            status: "aberto",
+            valorCorrigido: 99.9,
+            linhaDigitavel: "",
+            codigoPix: "",
+            dataVencimento: "2027-03-10"
+          },
+          {
+            id: 90002,
+            link: "https://snitelecom.sgp.net.br/boleto/vencido/",
+            status: "aberto",
+            valorCorrigido: 50.0,
+            linhaDigitavel: "",
+            codigoPix: "",
+            dataVencimento: "2026-06-01"
+          },
+          {
+            id: 90003,
+            link: "https://snitelecom.sgp.net.br/boleto/cancelado/",
+            status: "cancelado",
+            valorCorrigido: 10.0,
+            linhaDigitavel: "",
+            codigoPix: "",
+            dataVencimento: "2026-01-01"
+          }
+        ]
+      }
+    });
+
+    const result = await SgpService.listarBoletosAbertos("68197756953");
+
+    expect(result).toEqual([
+      {
+        linkBoleto: "https://snitelecom.sgp.net.br/boleto/vencido/",
+        linhaDigitavel: null,
+        pixCopiaCola: null,
+        valor: "50",
+        vencimento: "2026-06-01"
+      },
+      {
+        linkBoleto: "https://snitelecom.sgp.net.br/boleto/futuro/",
+        linhaDigitavel: null,
+        pixCopiaCola: null,
+        valor: "99.9",
+        vencimento: "2027-03-10"
+      }
+    ]);
+  });
+
+  it("retorna lista vazia quando não há nenhum título em aberto", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: { titulos: [] }
+    });
+
+    const result = await SgpService.listarBoletosAbertos("00000000000");
+
+    expect(result).toEqual([]);
+  });
+
+  it("propaga o erro quando a chamada falha", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(
+      SgpService.listarBoletosAbertos("12345678900")
+    ).rejects.toThrow("timeout");
+  });
+});
+
 describe("SgpService.liberarConfianca", () => {
   beforeEach(() => {
     process.env.SGP_URL = "https://snitelecom.sgp.net.br";

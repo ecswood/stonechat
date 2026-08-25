@@ -12,6 +12,7 @@ import UpdateTicketService from "../services/TicketServices/UpdateTicketService"
 import ListTicketsServiceKanban from "../services/TicketServices/ListTicketsServiceKanban";
 import PullTicketService from "../services/TicketServices/PullTicketService";
 import ListTicketsServicePipeline from "../services/TicketServices/ListTicketsServicePipeline";
+import { registerAiAttendance } from "../services/WbotServices/AiAgentActions";
 
 type IndexQuery = {
   searchParam: string;
@@ -228,6 +229,44 @@ export const update = async (
 
   const { ticket } = result;
 
+
+  return res.status(200).json(ticket);
+};
+
+// Botão do atendente "Voltar atendimento para IA" - reproduz exatamente o
+// estado em que um ticket novo já nasce (fila/usuário vazios, sem
+// integração/prompt setados na ficha do ticket - a IA responde pela
+// integração padrão da conexão), em vez de reinventar essa lógica aqui.
+// Reaplica a tag "Atendimento IA" na hora, sem esperar a IA responder de
+// novo pra ela reaparecer (ver registerAiAttendance).
+export const returnToAi = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { ticketId } = req.params;
+  const { companyId, id } = req.user;
+
+  const result = await UpdateTicketService({
+    ticketData: {
+      status: "pending",
+      queueId: null,
+      userId: null,
+      useIntegration: false,
+      integrationId: null,
+      promptId: null
+    },
+    ticketId,
+    companyId,
+    actionUserId: id
+  });
+
+  if (!result) {
+    throw new AppError("ERR_UPDATING_TICKET", 500);
+  }
+
+  const { ticket } = result;
+
+  await registerAiAttendance(ticket, companyId);
 
   return res.status(200).json(ticket);
 };

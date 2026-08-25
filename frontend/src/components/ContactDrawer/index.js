@@ -161,7 +161,7 @@ const ContactDrawer = ({ open, handleDrawerClose, contact, ticket, loading }) =>
 							</Button>
 							{(contact.id && openForm) && <ContactForm initialContact={contact} onCancel={() => setOpenForm(false)} />}
 						</Paper>
-						<SgpInfo contactId={contact.id} />
+						<SgpInfo contactId={contact.id} ticket={ticket} />
 						<Paper square variant="outlined" className={classes.contactDetails}>
 							<Typography variant="subtitle1" style={{marginBottom: 10}}>
 								{i18n.t("ticketOptionsMenu.appointmentsModal.title")}

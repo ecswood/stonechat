@@ -225,6 +225,41 @@ const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
   }
 };
 
+// Usado pelo painel do atendente - diferente de `buscarBoleto` (que a IA usa
+// e devolve só o título de vencimento mais próximo), aqui devolve TODOS os
+// títulos em aberto, já que o atendente pode precisar ver/mandar mais de um.
+const listarBoletosAbertos = async (cpfCnpj: string): Promise<SgpBoleto[]> => {
+  try {
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/ura/titulos/`,
+        { token: sgpToken(), app: "StoneChat", cpfcnpj: cpfCnpj },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
+
+    const titulos = response.data?.titulos ?? [];
+    return titulos
+      .filter((t: { status: string }) => t.status === "aberto")
+      .sort(
+        (a: { dataVencimento: string }, b: { dataVencimento: string }) =>
+          new Date(a.dataVencimento).getTime() -
+          new Date(b.dataVencimento).getTime()
+      )
+      .map((t: Record<string, unknown>) => ({
+        linkBoleto: (t.link as string) ?? "",
+        linhaDigitavel: (t.linhaDigitavel as string) || null,
+        pixCopiaCola: (t.codigoPix as string) || null,
+        valor: String(t.valorCorrigido ?? ""),
+        vencimento: (t.dataVencimento as string) ?? ""
+      }));
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.listarBoletosAbertos] cpfCnpj=${cpfCnpj}: ${err}`);
+    throw err;
+  }
+};
+
 // Endpoint real: POST /api/central/promessapagamento/ (confirmado ao vivo em produção,
 // nos 3 estados possíveis, contra um contrato real). Autenticação DIFERENTE dos outros
 // métodos deste arquivo: não usa token/app, usa cpfCnpj + senha do Central do Assinante
@@ -284,5 +319,6 @@ export default {
   consultarCliente,
   consultarClienteCompleto,
   buscarBoleto,
+  listarBoletosAbertos,
   liberarConfianca
 };
