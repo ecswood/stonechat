@@ -3,6 +3,7 @@ import isAuth from "../middleware/isAuth";
 
 import * as ContactController from "../controllers/ContactController";
 import * as ImportPhoneContactsController from "../controllers/ImportPhoneContactsController";
+import * as SgpController from "../controllers/SgpController";
 
 const contactRoutes = express.Router();
 
@@ -17,6 +18,12 @@ contactRoutes.get("/contacts", isAuth, ContactController.index);
 contactRoutes.get("/contacts/list", isAuth, ContactController.list);
 
 contactRoutes.get("/contacts/:contactId", isAuth, ContactController.show);
+
+contactRoutes.get(
+  "/contacts/:contactId/sgp-cliente",
+  isAuth,
+  SgpController.showCliente
+);
 
 contactRoutes.post("/contacts", isAuth, ContactController.store);
 

@@ -13,6 +13,19 @@ export interface SgpCliente {
   telefones: string[];
 }
 
+export interface SgpContrato {
+  contratoId: number;
+  plano: string;
+  status: string;
+  endereco: string | null;
+}
+
+export interface SgpClienteCompleto {
+  nome: string;
+  cpfCnpj: string;
+  contratos: SgpContrato[];
+}
+
 export interface SgpBoleto {
   linkBoleto: string;
   linhaDigitavel: string | null;
@@ -32,10 +45,11 @@ const SGP_TIMEOUT_MS = 8000;
 
 // Pedido do Edison: falha isolada do SGP (timeout, instabilidade momentânea)
 // não deve incomodar o cliente na hora - tenta mais uma vez automaticamente
-// antes de desistir. Contador de falhas consecutivas conta as 3 funções
-// juntas (consultarCliente, buscarBoleto, liberarConfianca) e zera em
-// qualquer sucesso - ao cruzar SGP_ALERT_THRESHOLD falhas seguidas, avisa o
-// grupo de monitoramento via notifySgpOutage (Task 3 deste plano).
+// antes de desistir. Contador de falhas consecutivas conta as 4 funções
+// juntas (consultarCliente, consultarClienteCompleto, buscarBoleto,
+// liberarConfianca) e zera em qualquer sucesso - ao cruzar
+// SGP_ALERT_THRESHOLD falhas seguidas, avisa o grupo de monitoramento via
+// notifySgpOutage (Task 3 deste plano).
 const SGP_ALERT_THRESHOLD = 3;
 let consecutiveFailures = 0;
 
@@ -96,6 +110,74 @@ const consultarCliente = async (
     // encontrado".
     Sentry.captureException(err);
     logger.error(`[SgpService.consultarCliente] cpfCnpj=${cpfCnpj}: ${err}`);
+    throw err;
+  }
+};
+
+// Cada item de `contratos` no retorno cru do SGP é um contrato/plano
+// individual do cliente (internet, TV, ou add-on como Telecine/Deezer) - um
+// mesmo CPF/CNPJ pode ter vários. Endereço não é um dado único do cliente:
+// contratos diferentes do mesmo CPF podem ter endereços diferentes (caso
+// real: um cliente com serviço em duas casas), e contratos de add-on (só
+// `planotv`, sem `servico_plano`) não têm campos de endereço - por isso o
+// endereço é montado por contrato, não uma vez só pro cliente.
+const montarEndereco = (contrato: Record<string, unknown>): string | null => {
+  const logradouro = contrato.endereco_logradouro as string | undefined;
+  if (!logradouro) return null;
+
+  const numero = (contrato.endereco_numero as string | number | undefined) ?? "s/n";
+  const cidade = contrato.endereco_cidade as string | undefined;
+  const uf = contrato.endereco_uf as string | undefined;
+  const cidadeUf = cidade && uf ? `${cidade}/${uf}` : cidade;
+
+  return [
+    `${logradouro}, ${numero}`,
+    contrato.endereco_complemento as string | undefined,
+    contrato.endereco_bairro as string | undefined,
+    cidadeUf,
+    contrato.endereco_cep as string | undefined
+  ]
+    .filter(Boolean)
+    .join(" - ");
+};
+
+// Usado pelo painel do atendente (ContactDrawer), não pela IA - por isso
+// devolve TODOS os contratos/planos do cliente (a IA usa só
+// `consultarCliente`, que assume o contrato mais relevante da conversa).
+// Não expõe `contratoCentralSenha`: o atendente não precisa da senha do
+// Central do Assinante do cliente pra ver o cadastro dele.
+const consultarClienteCompleto = async (
+  cpfCnpj: string
+): Promise<SgpClienteCompleto | null> => {
+  try {
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/ura/consultacliente/`,
+        { token: sgpToken(), app: "StoneChat", cpfcnpj: cpfCnpj },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
+
+    const contratos = response.data?.contratos ?? [];
+    if (contratos.length === 0) return null;
+
+    return {
+      nome: contratos[0].razaoSocial ?? "",
+      cpfCnpj: contratos[0].cpfCnpj ?? "",
+      contratos: contratos.map((c: Record<string, unknown>) => ({
+        contratoId: (c.contratoId as number) ?? 0,
+        plano:
+          (c.servico_plano as string) ||
+          (c.planointernet as string) ||
+          (c.planotv as string) ||
+          "—",
+        status: (c.contratoStatusDisplay as string) ?? "",
+        endereco: montarEndereco(c)
+      }))
+    };
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.consultarClienteCompleto] cpfCnpj=${cpfCnpj}: ${err}`);
     throw err;
   }
 };
@@ -198,4 +280,9 @@ const liberarConfianca = async (
   }
 };
 
-export default { consultarCliente, buscarBoleto, liberarConfianca };
+export default {
+  consultarCliente,
+  consultarClienteCompleto,
+  buscarBoleto,
+  liberarConfianca
+};

@@ -98,6 +98,82 @@ describe("SgpService.consultarCliente", () => {
   });
 });
 
+describe("SgpService.consultarClienteCompleto", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("retorna nome/cpf do cliente e todos os contratos/planos (caso real: mesmo CPF com endereços diferentes por contrato)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        contratos: [
+          {
+            razaoSocial: "EDISON CARLOS DOS SANTOS",
+            cpfCnpj: "681.977.569-53",
+            contratoId: 1388,
+            contratoStatusDisplay: "Suspenso",
+            servico_plano: "RADIO 20MB",
+            endereco_logradouro: "RUA 7 DE SETEMBRO",
+            endereco_numero: 422,
+            endereco_complemento: "CASA",
+            endereco_bairro: "VILA NOVA",
+            endereco_cidade: "JOAQUIM TÁVORA",
+            endereco_uf: "PR",
+            endereco_cep: "86455-000"
+          },
+          {
+            razaoSocial: "EDISON CARLOS DOS SANTOS",
+            cpfCnpj: "681.977.569-53",
+            contratoId: 1993,
+            contratoStatusDisplay: "Ativo",
+            planotv: "TELECINE"
+          }
+        ]
+      }
+    });
+
+    const result = await SgpService.consultarClienteCompleto("68197756953");
+
+    expect(result).toEqual({
+      nome: "EDISON CARLOS DOS SANTOS",
+      cpfCnpj: "681.977.569-53",
+      contratos: [
+        {
+          contratoId: 1388,
+          plano: "RADIO 20MB",
+          status: "Suspenso",
+          endereco: "RUA 7 DE SETEMBRO, 422 - CASA - VILA NOVA - JOAQUIM TÁVORA/PR - 86455-000"
+        },
+        {
+          contratoId: 1993,
+          plano: "TELECINE",
+          status: "Ativo",
+          endereco: null
+        }
+      ]
+    });
+  });
+
+  it("retorna null quando o SGP não localiza nenhum contrato", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: { contratos: [] }
+    });
+
+    const result = await SgpService.consultarClienteCompleto("00000000000");
+
+    expect(result).toBeNull();
+  });
+
+  it("propaga o erro quando a chamada falha", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(
+      SgpService.consultarClienteCompleto("12345678900")
+    ).rejects.toThrow("timeout");
+  });
+});
+
 describe("SgpService.buscarBoleto", () => {
   beforeEach(() => {
     process.env.SGP_URL = "https://snitelecom.sgp.net.br";

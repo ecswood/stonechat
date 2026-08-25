@@ -1538,6 +1538,15 @@ const messages = {
           edit: "Editar contato",
         },
         extraInfo: "Outras informações",
+        sgp: {
+          title: "Cadastro no SGP",
+          nome: "Nome",
+          cpfCnpj: "CPF/CNPJ",
+          planos: "Planos/contratos",
+          naoVinculado: "Este contato não tem CPF/CNPJ vinculado.",
+          naoEncontrado: "Nenhum cadastro localizado no SGP para este CPF/CNPJ.",
+          erro: "Não foi possível consultar o SGP agora.",
+        },
       },
       fileModal: {
         title: {
