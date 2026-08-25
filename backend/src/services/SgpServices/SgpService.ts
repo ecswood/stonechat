@@ -34,6 +34,20 @@ export interface SgpBoleto {
   vencimento: string;
 }
 
+export interface SgpStatusConexao {
+  servicoId: number;
+  plano: string;
+  login: string;
+  online: boolean;
+  ip: string | null;
+  concentrador: string | null;
+  inicioSessao: string | null;
+  fimSessao: string | null;
+  motivoDesconexao: string | null;
+  trafegoEntrada: number | null;
+  trafegoSaida: number | null;
+}
+
 export type SgpLiberacaoResultado =
   | { sucesso: true; protocolo: string; dataPromessa: string }
   | { sucesso: false; motivo: "ja_utilizado" | "erro"; mensagem: string };
@@ -228,6 +242,57 @@ const buscarBoleto = async (cpfCnpj: string): Promise<SgpBoleto | null> => {
 // Usado pelo painel do atendente - diferente de `buscarBoleto` (que a IA usa
 // e devolve só o título de vencimento mais próximo), aqui devolve TODOS os
 // títulos em aberto, já que o atendente pode precisar ver/mandar mais de um.
+// Painel de diagnóstico do atendente - status de conexão em tempo real via
+// RADIUS accounting do SGP (endpoint documentado em
+// /ws/radius/radacct/list/all/, achado 2026-08-25 vasculhando o catálogo
+// Postman oficial - a pesquisa anterior de bloqueio/desbloqueio nunca tinha
+// testado esse caminho). Uma chamada só, mesma auth token+app das outras -
+// não precisa de SSH/MikroTik nem do Hermes. `last_session=true` traz só a
+// sessão mais recente de cada contrato (atual, se online; última, se
+// offline), não o histórico completo.
+const consultarStatusConexao = async (
+  cpfCnpj: string
+): Promise<SgpStatusConexao[]> => {
+  try {
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/ws/radius/radacct/list/all/`,
+        {
+          token: sgpToken(),
+          app: "StoneChat",
+          cpfcnpj: cpfCnpj,
+          last_session: true
+        },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
+
+    const result = response.data?.result ?? [];
+    return result.map((c: Record<string, unknown>) => {
+      const sessoes = c.radacct as Record<string, unknown>[] | undefined;
+      const sessao = sessoes?.[0];
+
+      return {
+        servicoId: (c.servico_id as number) ?? 0,
+        plano: (c.plano as string) ?? "",
+        login: (c.pppoe_login as string) ?? "",
+        online: Boolean(c.online),
+        ip: (sessao?.framedipaddress as string) || null,
+        concentrador: (sessao?.nasipaddress as string) || null,
+        inicioSessao: (sessao?.acctstarttime as string) || null,
+        fimSessao: (sessao?.acctstoptime as string) || null,
+        motivoDesconexao: (sessao?.acctterminatecause as string) || null,
+        trafegoEntrada: (sessao?.acctinputoctets as number) ?? null,
+        trafegoSaida: (sessao?.acctoutputoctets as number) ?? null
+      };
+    });
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.consultarStatusConexao] cpfCnpj=${cpfCnpj}: ${err}`);
+    throw err;
+  }
+};
+
 const listarBoletosAbertos = async (cpfCnpj: string): Promise<SgpBoleto[]> => {
   try {
     const response = await withRetry(() =>
@@ -318,6 +383,7 @@ const liberarConfianca = async (
 export default {
   consultarCliente,
   consultarClienteCompleto,
+  consultarStatusConexao,
   buscarBoleto,
   listarBoletosAbertos,
   liberarConfianca

@@ -317,6 +317,144 @@ describe("SgpService.buscarBoleto", () => {
   });
 });
 
+describe("SgpService.consultarStatusConexao", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("retorna o status de conexão de cada contrato (caso real: 3 contratos, alguns online outros não)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        paggination: { total: 2, limit: 100, returned: 2, offset: 0 },
+        result: [
+          {
+            plano: "Fibra - 50MB FIBRA",
+            nome: "EDISON CARLOS DOS SANTOS",
+            pppoe_login: "joafesta",
+            servico_id: 1914,
+            online: false,
+            radacct: [
+              {
+                username: "joafesta",
+                framedipaddress: "100.73.3.80",
+                nasipaddress: "172.16.118.22",
+                acctstarttime: "2025-12-06T21:45:27",
+                acctstoptime: "2025-12-07T01:44:29",
+                acctterminatecause: "Lost-Carrier",
+                acctinputoctets: 574680833,
+                acctoutputoctets: 704357921
+              }
+            ]
+          },
+          {
+            plano: "Rádio - RADIO 20MB",
+            nome: "EDISON CARLOS DOS SANTOS",
+            pppoe_login: "joaobelo",
+            servico_id: 1,
+            online: true,
+            radacct: [
+              {
+                username: "joaobelo",
+                framedipaddress: "172.16.150.52",
+                nasipaddress: "172.16.118.24",
+                acctstarttime: "2026-08-22T12:20:50",
+                acctstoptime: null,
+                acctterminatecause: null,
+                acctinputoctets: 1051104847,
+                acctoutputoctets: 889152919
+              }
+            ]
+          }
+        ]
+      }
+    });
+
+    const result = await SgpService.consultarStatusConexao("68197756953");
+
+    expect(result).toEqual([
+      {
+        servicoId: 1914,
+        plano: "Fibra - 50MB FIBRA",
+        login: "joafesta",
+        online: false,
+        ip: "100.73.3.80",
+        concentrador: "172.16.118.22",
+        inicioSessao: "2025-12-06T21:45:27",
+        fimSessao: "2025-12-07T01:44:29",
+        motivoDesconexao: "Lost-Carrier",
+        trafegoEntrada: 574680833,
+        trafegoSaida: 704357921
+      },
+      {
+        servicoId: 1,
+        plano: "Rádio - RADIO 20MB",
+        login: "joaobelo",
+        online: true,
+        ip: "172.16.150.52",
+        concentrador: "172.16.118.24",
+        inicioSessao: "2026-08-22T12:20:50",
+        fimSessao: null,
+        motivoDesconexao: null,
+        trafegoEntrada: 1051104847,
+        trafegoSaida: 889152919
+      }
+    ]);
+  });
+
+  it("retorna lista vazia quando o CPF não tem nenhum contrato", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: { paggination: { total: 0, limit: 100, returned: 0, offset: 0 }, result: [] }
+    });
+
+    const result = await SgpService.consultarStatusConexao("00000000000");
+
+    expect(result).toEqual([]);
+  });
+
+  it("retorna campos nulos quando o contrato nunca teve sessão registrada", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        result: [
+          {
+            plano: "Rádio - RADIO 20MB",
+            pppoe_login: "semSessao",
+            servico_id: 42,
+            online: false,
+            radacct: []
+          }
+        ]
+      }
+    });
+
+    const result = await SgpService.consultarStatusConexao("11111111111");
+
+    expect(result).toEqual([
+      {
+        servicoId: 42,
+        plano: "Rádio - RADIO 20MB",
+        login: "semSessao",
+        online: false,
+        ip: null,
+        concentrador: null,
+        inicioSessao: null,
+        fimSessao: null,
+        motivoDesconexao: null,
+        trafegoEntrada: null,
+        trafegoSaida: null
+      }
+    ]);
+  });
+
+  it("propaga o erro quando a chamada falha", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(
+      SgpService.consultarStatusConexao("12345678900")
+    ).rejects.toThrow("timeout");
+  });
+});
+
 describe("SgpService.listarBoletosAbertos", () => {
   beforeEach(() => {
     process.env.SGP_URL = "https://snitelecom.sgp.net.br";

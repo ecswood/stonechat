@@ -45,6 +45,28 @@ export const showCliente = async (
   }
 };
 
+export const statusConexao = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { contactId } = req.params;
+  const { companyId } = req.user;
+
+  const contact = await ShowContactService(contactId, companyId);
+
+  if (!contact.cpfCnpj) {
+    return res.json({ vinculado: false });
+  }
+
+  try {
+    const conexoes = await SgpService.consultarStatusConexao(contact.cpfCnpj);
+    return res.json({ vinculado: true, conexoes });
+  } catch (err) {
+    logger.error(`[SgpController.statusConexao] contactId=${contactId}: ${err}`);
+    return res.status(502).json({ vinculado: true, erro: true });
+  }
+};
+
 export const listBoletos = async (
   req: Request,
   res: Response

@@ -11,9 +11,12 @@ import DialogTitle from "@material-ui/core/DialogTitle";
 import DialogContent from "@material-ui/core/DialogContent";
 import DialogContentText from "@material-ui/core/DialogContentText";
 import DialogActions from "@material-ui/core/DialogActions";
+import IconButton from "@material-ui/core/IconButton";
 import ReceiptIcon from "@material-ui/icons/Receipt";
 import LockOpenIcon from "@material-ui/icons/LockOpen";
 import AndroidIcon from "@material-ui/icons/Android";
+import NetworkCheckIcon from "@material-ui/icons/NetworkCheck";
+import RefreshIcon from "@material-ui/icons/Refresh";
 import { makeStyles } from "@material-ui/core/styles";
 
 import api from "../../services/api";
@@ -90,6 +93,198 @@ const formatDateBR = iso => {
 	if (!iso) return "";
 	const [ano, mes, dia] = iso.split("-");
 	return ano && mes && dia ? `${dia}/${mes}/${ano}` : iso;
+};
+
+const formatDataHoraBR = iso => {
+	if (!iso) return "";
+	const d = new Date(iso);
+	if (Number.isNaN(d.getTime())) return iso;
+	return d.toLocaleString("pt-BR");
+};
+
+const formatDuracao = iso => {
+	if (!iso) return "";
+	const inicio = new Date(iso).getTime();
+	if (Number.isNaN(inicio)) return "";
+	const segundos = Math.max(0, Math.floor((Date.now() - inicio) / 1000));
+	const dias = Math.floor(segundos / 86400);
+	const horas = Math.floor((segundos % 86400) / 3600);
+	const minutos = Math.floor((segundos % 3600) / 60);
+	const partes = [];
+	if (dias) partes.push(`${dias}d`);
+	if (horas || dias) partes.push(`${horas}h`);
+	partes.push(`${minutos}min`);
+	return partes.join(" ");
+};
+
+const formatBytes = bytes => {
+	if (bytes === null || bytes === undefined) return "";
+	if (bytes < 1024) return `${bytes} B`;
+	const unidades = ["KB", "MB", "GB", "TB"];
+	let valor = bytes;
+	let i = -1;
+	do {
+		valor /= 1024;
+		i += 1;
+	} while (valor >= 1024 && i < unidades.length - 1);
+	return `${valor.toFixed(1)} ${unidades[i]}`;
+};
+
+const DIAGNOSTICO_REFRESH_MS = 20000;
+
+const DiagnosticoDialog = ({ open, onClose, contactId }) => {
+	const classes = useStyles();
+	const [loading, setLoading] = useState(true);
+	const [data, setData] = useState(null);
+	const [atualizadoEm, setAtualizadoEm] = useState(null);
+
+	const carregar = async (mostrarLoading = true) => {
+		if (mostrarLoading) setLoading(true);
+		try {
+			const { data: response } = await api.get(
+				`/contacts/${contactId}/sgp-conexao`
+			);
+			setData(response);
+			setAtualizadoEm(new Date());
+		} catch (err) {
+			setData({ erro: true });
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		if (!open) return undefined;
+
+		carregar(true);
+		const interval = setInterval(() => carregar(false), DIAGNOSTICO_REFRESH_MS);
+		return () => clearInterval(interval);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [open, contactId]);
+
+	return (
+		<Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+			<DialogTitle>
+				{i18n.t("contactDrawer.sgp.diagnosticoTitulo")}
+				<IconButton
+					size="small"
+					onClick={() => carregar(true)}
+					style={{ marginLeft: 8 }}
+					title={i18n.t("contactDrawer.sgp.atualizarAgora")}
+				>
+					<RefreshIcon fontSize="small" />
+				</IconButton>
+			</DialogTitle>
+			<DialogContent>
+				{loading && (
+					<div className={classes.loadingWrapper}>
+						<CircularProgress size={24} />
+					</div>
+				)}
+				{!loading && data?.erro && (
+					<Typography color="error">
+						{i18n.t("contactDrawer.sgp.erro")}
+					</Typography>
+				)}
+				{!loading && data?.vinculado === false && (
+					<Typography color="textSecondary">
+						{i18n.t("contactDrawer.sgp.naoVinculado")}
+					</Typography>
+				)}
+				{!loading && data?.conexoes?.length === 0 && (
+					<Typography color="textSecondary">
+						{i18n.t("contactDrawer.sgp.semConexao")}
+					</Typography>
+				)}
+				{!loading &&
+					data?.conexoes?.map(conexao => (
+						<Paper
+							key={conexao.servicoId}
+							variant="outlined"
+							className={classes.contratoCard}
+						>
+							<div className={classes.contratoTitle}>
+								<Typography variant="body2" style={{ fontWeight: 500 }}>
+									{conexao.plano}
+								</Typography>
+								<Chip
+									size="small"
+									label={
+										conexao.online
+											? i18n.t("contactDrawer.sgp.online")
+											: i18n.t("contactDrawer.sgp.offline")
+									}
+									style={{
+										backgroundColor: conexao.online ? "#2E7D32" : "#C62828",
+										color: "#fff",
+									}}
+								/>
+							</div>
+
+							{conexao.online ? (
+								<>
+									<div className={classes.row}>
+										<span className={classes.label}>
+											{i18n.t("contactDrawer.sgp.ip")}
+										</span>
+										<span className={classes.value}>{conexao.ip || "—"}</span>
+									</div>
+									<div className={classes.row}>
+										<span className={classes.label}>
+											{i18n.t("contactDrawer.sgp.conectadoDesde")}
+										</span>
+										<span className={classes.value}>
+											{formatDataHoraBR(conexao.inicioSessao)} (
+											{formatDuracao(conexao.inicioSessao)})
+										</span>
+									</div>
+								</>
+							) : (
+								<div className={classes.row}>
+									<span className={classes.label}>
+										{i18n.t("contactDrawer.sgp.ultimaQueda")}
+									</span>
+									<span className={classes.value}>
+										{conexao.fimSessao
+											? `${formatDataHoraBR(conexao.fimSessao)}${
+													conexao.motivoDesconexao
+														? ` (${conexao.motivoDesconexao})`
+														: ""
+											  }`
+											: i18n.t("contactDrawer.sgp.semRegistro")}
+									</span>
+								</div>
+							)}
+
+							{(conexao.trafegoEntrada || conexao.trafegoSaida) && (
+								<div className={classes.row}>
+									<span className={classes.label}>
+										{i18n.t("contactDrawer.sgp.trafego")}
+									</span>
+									<span className={classes.value}>
+										↓{formatBytes(conexao.trafegoEntrada)} / ↑
+										{formatBytes(conexao.trafegoSaida)}
+									</span>
+								</div>
+							)}
+						</Paper>
+					))}
+				{!loading && atualizadoEm && !data?.erro && data?.vinculado !== false && (
+					<Typography
+						variant="caption"
+						color="textSecondary"
+						style={{ display: "block", marginTop: 8 }}
+					>
+						{i18n.t("contactDrawer.sgp.atualizadoAs")}{" "}
+						{atualizadoEm.toLocaleTimeString("pt-BR")}
+					</Typography>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={onClose}>{i18n.t("contactDrawer.sgp.fechar")}</Button>
+			</DialogActions>
+		</Dialog>
+	);
 };
 
 const BoletosDialog = ({ open, onClose, contactId, ticketId }) => {
@@ -338,6 +533,7 @@ const SgpInfo = ({ contactId, ticket }) => {
 	const classes = useStyles();
 	const [loading, setLoading] = useState(true);
 	const [data, setData] = useState(null);
+	const [diagnosticoOpen, setDiagnosticoOpen] = useState(false);
 	const [boletosOpen, setBoletosOpen] = useState(false);
 	const [desbloquearOpen, setDesbloquearOpen] = useState(false);
 	const [retornarIaOpen, setRetornarIaOpen] = useState(false);
@@ -460,6 +656,14 @@ const SgpInfo = ({ contactId, ticket }) => {
 					<Button
 						size="small"
 						variant="outlined"
+						startIcon={<NetworkCheckIcon />}
+						onClick={() => setDiagnosticoOpen(true)}
+					>
+						{i18n.t("contactDrawer.sgp.botaoDiagnostico")}
+					</Button>
+					<Button
+						size="small"
+						variant="outlined"
 						startIcon={<ReceiptIcon />}
 						onClick={() => setBoletosOpen(true)}
 					>
@@ -486,6 +690,11 @@ const SgpInfo = ({ contactId, ticket }) => {
 				</div>
 			)}
 
+			<DiagnosticoDialog
+				open={diagnosticoOpen}
+				onClose={() => setDiagnosticoOpen(false)}
+				contactId={contactId}
+			/>
 			<BoletosDialog
 				open={boletosOpen}
 				onClose={() => setBoletosOpen(false)}

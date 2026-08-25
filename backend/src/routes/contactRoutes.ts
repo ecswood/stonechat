@@ -26,6 +26,12 @@ contactRoutes.get(
 );
 
 contactRoutes.get(
+  "/contacts/:contactId/sgp-conexao",
+  isAuth,
+  SgpController.statusConexao
+);
+
+contactRoutes.get(
   "/contacts/:contactId/sgp-boletos",
   isAuth,
   SgpController.listBoletos
