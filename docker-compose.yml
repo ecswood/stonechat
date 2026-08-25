@@ -12,7 +12,7 @@ services:
       - stonechat_pgdata:/var/lib/postgresql/data
     restart: always
     networks:
-      - sni_network
+      - stonechat_network
 
   stonechat_redis:
     image: redis:7-alpine
@@ -22,17 +22,19 @@ services:
     volumes:
       - stonechat_redis_data:/data
     networks:
-      - sni_network
+      - stonechat_network
 
   stonechat_backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: stonechat_backend
+    ports:
+      - "127.0.0.1:4001:8080"
     environment:
       - NODE_ENV=production
-      - BACKEND_URL=${BACKEND_URL:-https://147.15.57.112/stonechat/admin}
-      - FRONTEND_URL=${FRONTEND_URL:-https://147.15.57.112}
+      - BACKEND_URL=${BACKEND_URL:-https://app.stonechat.com.br/admin}
+      - FRONTEND_URL=${FRONTEND_URL:-https://app.stonechat.com.br}
       - PROXY_PORT=
       - PORT=8080
       - DB_DIALECT=postgres
@@ -68,26 +70,27 @@ services:
       - stonechat_redis
     restart: always
     networks:
-      - sni_network
+      - stonechat_network
 
   stonechat_frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        REACT_APP_BACKEND_URL: ${BACKEND_URL:-https://147.15.57.112/stonechat/admin}
-        PUBLIC_URL: /stonechat
+        REACT_APP_BACKEND_URL: ${BACKEND_URL:-https://app.stonechat.com.br/admin}
+        PUBLIC_URL: /
     container_name: stonechat_frontend
+    ports:
+      - "127.0.0.1:8091:80"
     depends_on:
       - stonechat_backend
     restart: always
     networks:
-      - sni_network
+      - stonechat_network
 
 networks:
-  sni_network:
-    external: true
-    name: snilog_sni_network
+  stonechat_network:
+    driver: bridge
 
 volumes:
   stonechat_pgdata:
