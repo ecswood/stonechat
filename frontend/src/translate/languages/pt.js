@@ -1561,6 +1561,7 @@ const messages = {
           trafego: "Tráfego",
           atualizadoAs: "Atualizado às",
           atualizarAgora: "Atualizar agora",
+          acessarEquipamento: "Acessar equipamento do cliente",
           botaoBoletos: "Ver boletos em aberto",
           botaoDesbloquear: "Desbloquear serviço",
           botaoRetornarIa: "Voltar atendimento para IA",

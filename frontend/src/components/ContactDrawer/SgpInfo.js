@@ -18,6 +18,7 @@ import AndroidIcon from "@material-ui/icons/Android";
 import NetworkCheckIcon from "@material-ui/icons/NetworkCheck";
 import RefreshIcon from "@material-ui/icons/Refresh";
 import DescriptionIcon from "@material-ui/icons/Description";
+import RouterIcon from "@material-ui/icons/Router";
 import { makeStyles } from "@material-ui/core/styles";
 
 import api from "../../services/api";
@@ -132,6 +133,7 @@ const formatBytes = bytes => {
 };
 
 const DIAGNOSTICO_REFRESH_MS = 20000;
+const EQUIPAMENTO_PORTA = 8082;
 
 const DiagnosticoDialog = ({ open, onClose, contactId }) => {
 	const classes = useStyles();
@@ -239,6 +241,23 @@ const DiagnosticoDialog = ({ open, onClose, contactId }) => {
 											{formatDuracao(conexao.inicioSessao)})
 										</span>
 									</div>
+									{conexao.ip && (
+										<Button
+											size="small"
+											variant="outlined"
+											startIcon={<RouterIcon />}
+											style={{ marginTop: 8 }}
+											onClick={() =>
+												window.open(
+													`http://${conexao.ip}:${EQUIPAMENTO_PORTA}`,
+													"_blank",
+													"noopener,noreferrer"
+												)
+											}
+										>
+											{i18n.t("contactDrawer.sgp.acessarEquipamento")}
+										</Button>
+									)}
 								</>
 							) : (
 								<div className={classes.row}>
