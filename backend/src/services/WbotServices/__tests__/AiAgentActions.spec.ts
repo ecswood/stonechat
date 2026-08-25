@@ -46,7 +46,7 @@ import FindOrCreateAiUserService from "../../UserServices/FindOrCreateAiUserServ
 // eslint-disable-next-line import/first
 import CreateMessageService from "../../MessageServices/CreateMessageService";
 // eslint-disable-next-line import/first
-import { registerAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, handleVerificarBloqueioAction, handleEncerrarAtendimentoAction, dispatchAiAction, isAiHandledTicket, isTechnicalDiagnosticTicket, hasAnyActionMarker } from "../AiAgentActions";
+import { registerAiAttendance, clearAiAttendance, transferToQueueByName, handleBuscarBoletoAction, handleLiberarConfiancaAction, handleDesvincularCpfAction, handleVerificarBloqueioAction, handleEncerrarAtendimentoAction, dispatchAiAction, isAiHandledTicket, isTechnicalDiagnosticTicket, hasAnyActionMarker } from "../AiAgentActions";
 
 const VALID_FAREWELLS = [
   "Tenha uma boa madrugada!",
@@ -79,6 +79,31 @@ describe("registerAiAttendance", () => {
     expect(TicketTag.findOrCreate).toHaveBeenCalledWith({
       where: { ticketId: 22, tagId: 5 }
     });
+  });
+});
+
+describe("clearAiAttendance", () => {
+  it("remove a tag 'Atendimento IA' do ticket quando ela existe", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue({ id: 5 });
+    (TicketTag.destroy as jest.Mock) = jest.fn().mockResolvedValue(1);
+
+    await clearAiAttendance({ id: 22 } as any, 1);
+
+    expect(Tag.findOne).toHaveBeenCalledWith({
+      where: { name: "Atendimento IA", companyId: 1 }
+    });
+    expect(TicketTag.destroy).toHaveBeenCalledWith({
+      where: { ticketId: 22, tagId: 5 }
+    });
+  });
+
+  it("não faz nada quando a tag não existe pra essa empresa", async () => {
+    (Tag.findOne as jest.Mock) = jest.fn().mockResolvedValue(null);
+    (TicketTag.destroy as jest.Mock) = jest.fn();
+
+    await clearAiAttendance({ id: 22 } as any, 1);
+
+    expect(TicketTag.destroy).not.toHaveBeenCalled();
   });
 });
 

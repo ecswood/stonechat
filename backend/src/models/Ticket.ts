@@ -121,6 +121,15 @@ class Ticket extends Model<Ticket> {
   @Column
   useIntegration: boolean;
 
+  // Botão "Voltar atendimento para IA" quando o ticket já está com um
+  // atendente (userId setado): a IA volta a responder SEM tirar o ticket
+  // do Kanban desse atendente (fica em "Atendendo", não volta pra "IA").
+  // Pausa sozinho assim que o atendente manda uma mensagem manual (ver
+  // MessageController.store).
+  @Default(false)
+  @Column
+  aiTakeover: boolean;
+
   @ForeignKey(() => QueueIntegrations)
   @Column
   integrationId: number;

@@ -239,39 +239,23 @@ export const update = async (
   return res.status(200).json(ticket);
 };
 
-// Botão do atendente "Voltar atendimento para IA" - reproduz exatamente o
-// estado em que um ticket novo já nasce (fila/usuário vazios, sem
-// integração/prompt setados na ficha do ticket - a IA responde pela
-// integração padrão da conexão), em vez de reinventar essa lógica aqui.
-// Reaplica a tag "Atendimento IA" na hora, sem esperar a IA responder de
-// novo pra ela reaparecer (ver registerAiAttendance).
+// Botão do atendente "Voltar atendimento para IA" - pedido do Edison
+// (2026-08-25): a IA volta a responder o cliente SEM tirar o ticket do
+// Kanban do atendente (fica em "Atendendo", com o mesmo userId/queueId,
+// não volta pra "IA"). Só liga a flag `aiTakeover` (ver
+// wbotMessageListener.ts) e reaplica a tag "Atendimento IA" como indicador
+// visual - não usa UpdateTicketService de propósito, pra não mexer em
+// status/fila/usuário. Pausa sozinho assim que o atendente mandar uma
+// mensagem manual (ver MessageController.store/clearAiAttendance).
 export const returnToAi = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   const { ticketId } = req.params;
-  const { companyId, id } = req.user;
+  const { companyId } = req.user;
 
-  const result = await UpdateTicketService({
-    ticketData: {
-      status: "pending",
-      queueId: null,
-      userId: null,
-      useIntegration: false,
-      integrationId: null,
-      promptId: null
-    },
-    ticketId,
-    companyId,
-    actionUserId: id
-  });
-
-  if (!result) {
-    throw new AppError("ERR_UPDATING_TICKET", 500);
-  }
-
-  const { ticket } = result;
-
+  const ticket = await ShowTicketService(ticketId, companyId);
+  await ticket.update({ aiTakeover: true });
   await registerAiAttendance(ticket, companyId);
 
   return res.status(200).json(ticket);

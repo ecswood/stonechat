@@ -39,6 +39,22 @@ export const registerAiAttendance = async (
   });
 };
 
+// Contraparte de registerAiAttendance - usada quando o atendente manda uma
+// mensagem manual num ticket em modo "aiTakeover" (ver
+// MessageController.store): a IA para de responder e a tag some, sinalizando
+// que quem está atendendo agora é a pessoa, não a IA.
+export const clearAiAttendance = async (
+  ticket: Ticket,
+  companyId: number
+): Promise<void> => {
+  const tag = await Tag.findOne({
+    where: { name: AI_ATTENDANCE_TAG_NAME, companyId }
+  });
+  if (!tag) return;
+
+  await TicketTag.destroy({ where: { ticketId: ticket.id, tagId: tag.id } });
+};
+
 export const isAiHandledTicket = async (
   ticketId: number,
   companyId: number

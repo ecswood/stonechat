@@ -20,6 +20,7 @@ import CheckContactNumber from "../services/WbotServices/CheckNumber";
 import CheckIsValidContact from "../services/WbotServices/CheckIsValidContact";
 import GetProfilePicUrl from "../services/WbotServices/GetProfilePicUrl";
 import CreateOrUpdateContactService from "../services/ContactServices/CreateOrUpdateContactService";
+import { clearAiAttendance } from "../services/WbotServices/AiAgentActions";
 type IndexQuery = {
   pageNumber: string;
 };
@@ -67,6 +68,15 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   const { companyId } = req.user;
 
   const ticket = await ShowTicketService(ticketId, companyId);
+
+  // Atendente mandou mensagem manual num ticket em modo "aiTakeover" (IA
+  // respondendo por ele) - isso pausa a IA nesse ticket na hora, pra não
+  // arriscar os dois respondendo ao mesmo cliente ao mesmo tempo. Ver
+  // TicketController.returnToAi.
+  if (ticket.aiTakeover) {
+    await ticket.update({ aiTakeover: false });
+    await clearAiAttendance(ticket, companyId);
+  }
 
   SetTicketMessagesAsRead(ticket);
 

@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { useHistory } from "react-router-dom";
 import { toast } from "react-toastify";
 
 import Paper from "@material-ui/core/Paper";
@@ -293,7 +292,6 @@ const DesbloquearDialog = ({ open, onClose, contactId }) => {
 };
 
 const RetornarIaDialog = ({ open, onClose, ticketId }) => {
-	const history = useHistory();
 	const [loading, setLoading] = useState(false);
 
 	const confirmar = async () => {
@@ -302,7 +300,6 @@ const RetornarIaDialog = ({ open, onClose, ticketId }) => {
 			await api.put(`/tickets/${ticketId}/retornar-ia`);
 			toast.success(i18n.t("contactDrawer.sgp.retornarIaSucesso"));
 			onClose();
-			history.push("/tickets");
 		} catch (err) {
 			toastError(err);
 		} finally {

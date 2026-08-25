@@ -1569,8 +1569,9 @@ const messages = {
             "Liberado até {{data}}. Protocolo: {{protocolo}}",
           retornarIaTitulo: "Voltar atendimento para IA",
           retornarIaConfirmacao:
-            "Isso vai tirar este ticket do seu atendimento e devolver para a IA responder. Confirma?",
-          retornarIaSucesso: "Ticket devolvido para a IA.",
+            "A IA volta a responder o cliente neste ticket, mas ele continua com você (não sai do seu Kanban). Se você mandar uma mensagem, a IA pausa na hora e você assume de novo. Confirma?",
+          retornarIaSucesso:
+            "IA respondendo por você agora. Mande uma mensagem quando quiser assumir de volta.",
         },
       },
       fileModal: {

@@ -1969,6 +1969,22 @@ const handleMessage = async (
       await handleOpenAi(msg, wbot, ticket, contact, mediaSent);
     }
 
+    // IA respondendo por um ticket já atribuído a um atendente (botão
+    // "Voltar atendimento para IA" mantendo o ticket no Kanban dele - ver
+    // TicketController.returnToAi). Exige `ticket.userId` de propósito, pra
+    // nunca coincidir com o branch "openai na conexao" acima (mutuamente
+    // exclusivos - aquele exige `!ticket.userId`) e nunca disparar a IA em
+    // dobro pra mesma mensagem.
+    if (
+      !isGroup &&
+      !msg.key.fromMe &&
+      ticket.userId &&
+      ticket.aiTakeover &&
+      !isNil(whatsapp.promptId)
+    ) {
+      await handleOpenAi(msg, wbot, ticket, contact, mediaSent);
+    }
+
     //integraçao na conexao
     if (
       !msg.key.fromMe &&
