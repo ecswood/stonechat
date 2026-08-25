@@ -1584,6 +1584,8 @@ const messages = {
             "A IA volta a responder o cliente neste ticket, mas ele continua com você (não sai do seu Kanban). Se você mandar uma mensagem, a IA pausa na hora e você assume de novo. Confirma?",
           retornarIaSucesso:
             "IA respondendo por você agora. Mande uma mensagem quando quiser assumir de volta.",
+          botaoResumo: "Resumir atendimento",
+          resumoTitulo: "Resumo do atendimento",
         },
       },
       fileModal: {

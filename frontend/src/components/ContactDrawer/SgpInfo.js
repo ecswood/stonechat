@@ -17,6 +17,7 @@ import LockOpenIcon from "@material-ui/icons/LockOpen";
 import AndroidIcon from "@material-ui/icons/Android";
 import NetworkCheckIcon from "@material-ui/icons/NetworkCheck";
 import RefreshIcon from "@material-ui/icons/Refresh";
+import DescriptionIcon from "@material-ui/icons/Description";
 import { makeStyles } from "@material-ui/core/styles";
 
 import api from "../../services/api";
@@ -529,6 +530,66 @@ const RetornarIaDialog = ({ open, onClose, ticketId }) => {
 	);
 };
 
+const ResumoDialog = ({ open, onClose, ticketId }) => {
+	const classes = useStyles();
+	const [loading, setLoading] = useState(true);
+	const [resumo, setResumo] = useState("");
+	const [erro, setErro] = useState(false);
+
+	useEffect(() => {
+		if (!open) return;
+
+		setLoading(true);
+		setErro(false);
+		setResumo("");
+
+		(async () => {
+			try {
+				const { data } = await api.get(`/tickets/${ticketId}/resumo`);
+				setResumo(data.resumo);
+			} catch (err) {
+				setErro(true);
+			} finally {
+				setLoading(false);
+			}
+		})();
+	}, [open, ticketId]);
+
+	return (
+		<Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+			<DialogTitle>{i18n.t("contactDrawer.sgp.resumoTitulo")}</DialogTitle>
+			<DialogContent>
+				{loading && (
+					<div className={classes.loadingWrapper}>
+						<CircularProgress size={24} />
+					</div>
+				)}
+				{!loading && erro && (
+					<Typography color="error">
+						{i18n.t("contactDrawer.sgp.erro")}
+					</Typography>
+				)}
+				{!loading && !erro && (
+					<Typography variant="body2" style={{ whiteSpace: "pre-line" }}>
+						{resumo.split(/(\*\*.+?\*\*)/g).map((trecho, index) =>
+							trecho.startsWith("**") && trecho.endsWith("**") ? (
+								// eslint-disable-next-line react/no-array-index-key
+								<strong key={index}>{trecho.slice(2, -2)}</strong>
+							) : (
+								// eslint-disable-next-line react/no-array-index-key
+								<React.Fragment key={index}>{trecho}</React.Fragment>
+							)
+						)}
+					</Typography>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={onClose}>{i18n.t("contactDrawer.sgp.fechar")}</Button>
+			</DialogActions>
+		</Dialog>
+	);
+};
+
 const SgpInfo = ({ contactId, ticket }) => {
 	const classes = useStyles();
 	const [loading, setLoading] = useState(true);
@@ -537,6 +598,7 @@ const SgpInfo = ({ contactId, ticket }) => {
 	const [boletosOpen, setBoletosOpen] = useState(false);
 	const [desbloquearOpen, setDesbloquearOpen] = useState(false);
 	const [retornarIaOpen, setRetornarIaOpen] = useState(false);
+	const [resumoOpen, setResumoOpen] = useState(false);
 
 	useEffect(() => {
 		if (!contactId) return undefined;
@@ -687,6 +749,16 @@ const SgpInfo = ({ contactId, ticket }) => {
 							{i18n.t("contactDrawer.sgp.botaoRetornarIa")}
 						</Button>
 					)}
+					{ticket?.id && (
+						<Button
+							size="small"
+							variant="outlined"
+							startIcon={<DescriptionIcon />}
+							onClick={() => setResumoOpen(true)}
+						>
+							{i18n.t("contactDrawer.sgp.botaoResumo")}
+						</Button>
+					)}
 				</div>
 			)}
 
@@ -710,6 +782,13 @@ const SgpInfo = ({ contactId, ticket }) => {
 				<RetornarIaDialog
 					open={retornarIaOpen}
 					onClose={() => setRetornarIaOpen(false)}
+					ticketId={ticket.id}
+				/>
+			)}
+			{ticket?.id && (
+				<ResumoDialog
+					open={resumoOpen}
+					onClose={() => setResumoOpen(false)}
 					ticketId={ticket.id}
 				/>
 			)}

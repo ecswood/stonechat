@@ -21,6 +21,9 @@ import formatBody from "../helpers/Mustache";
 import { formatDateBR } from "../helpers/FormatDateBR";
 import CreateMessageService from "../services/MessageServices/CreateMessageService";
 import { v4 as uuidv4 } from "uuid";
+import { Configuration, OpenAIApi } from "openai";
+import Message from "../models/Message";
+import ShowWhatsAppService from "../services/WhatsappService/ShowWhatsAppService";
 
 type IndexQuery = {
   searchParam: string;
@@ -338,6 +341,67 @@ export const sendBoleto = async (
   }
 
   return res.status(200).json({ enviado: true });
+};
+
+// Botão "Resumir atendimento" do painel do ticket - pedido do Edison: um
+// resumo gerado pela IA de tudo que foi conversado nesta sessão de
+// atendimento, pro atendente ler rápido sem rolar o histórico inteiro.
+// Reaproveita a mesma configuração de IA (apiKey/model) da conexão
+// WhatsApp do ticket - não manda nada pro cliente, só devolve o texto pro
+// painel.
+export const resumirConversa = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { ticketId } = req.params;
+  const { companyId } = req.user;
+
+  const ticket = await ShowTicketService(ticketId, companyId);
+  const { prompt } = await ShowWhatsAppService(ticket.whatsappId, companyId);
+
+  if (!prompt) {
+    throw new AppError("ERR_NO_PROMPT_CONFIGURED", 400);
+  }
+
+  const messages = await Message.findAll({
+    where: { ticketId: ticket.id },
+    order: [["createdAt", "ASC"]],
+    limit: 300
+  });
+
+  const historico = messages
+    .filter(m =>
+      ["conversation", "extendedTextMessage", "audio"].includes(m.mediaType)
+    )
+    .map(m => `${m.fromMe ? "Atendente/IA" : "Cliente"}: ${m.body}`)
+    .join("\n");
+
+  if (!historico.trim()) {
+    return res.status(200).json({
+      resumo: "Ainda não há mensagens de texto nesta conversa pra resumir."
+    });
+  }
+
+  const configuration = new Configuration({ apiKey: prompt.apiKey });
+  const openai = new OpenAIApi(configuration);
+
+  const chat = await openai.createChatCompletion({
+    model: prompt.model,
+    messages: [
+      {
+        role: "system",
+        content:
+          "Você resume atendimentos de suporte ao cliente de um provedor de internet, em português do Brasil, pro atendente humano ler rápido. Responda em bullets curtos e objetivos cobrindo: motivo do contato, o que já foi verificado/feito (incluindo ações automáticas como consulta de boleto, liberação, diagnóstico), e o status atual/próximo passo. Nunca invente nada que não esteja na conversa."
+      },
+      { role: "user", content: historico }
+    ],
+    max_tokens: 500,
+    temperature: 0.3
+  });
+
+  const resumo = chat.data.choices[0].message?.content ?? "";
+
+  return res.status(200).json({ resumo });
 };
 
 export const pull = async (

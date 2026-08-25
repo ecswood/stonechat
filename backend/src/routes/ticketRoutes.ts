@@ -31,6 +31,12 @@ ticketRoutes.post(
   TicketController.sendBoleto
 );
 
+ticketRoutes.get(
+  "/tickets/:ticketId/resumo",
+  isAuth,
+  TicketController.resumirConversa
+);
+
 ticketRoutes.put("/tickets/:ticketId/pull", isAuth, TicketController.pull);
 
 ticketRoutes.delete("/tickets/:ticketId", isAuth, TicketController.remove);
