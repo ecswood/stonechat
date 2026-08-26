@@ -1574,6 +1574,8 @@ const messages = {
         placeholderOpen: "Digite uma mensagem",
         placeholderClosed:
             "Reabra ou aceite esse ticket para enviar uma mensagem.",
+        placeholderLocked:
+            "Esse atendimento é de outro atendente - você só pode acompanhar.",
         signMessage: "Assinar",
       },
       contactDrawer: {

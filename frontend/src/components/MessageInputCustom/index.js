@@ -393,6 +393,9 @@ const CustomInput = (props) => {
     if (ticketStatus === "open") {
       return i18n.t("messagesInput.placeholderOpen");
     }
+    if (ticketStatus === "locked") {
+      return i18n.t("messagesInput.placeholderLocked");
+    }
     return i18n.t("messagesInput.placeholderClosed");
   };
 
@@ -464,7 +467,7 @@ const CustomInput = (props) => {
 };
 
 const MessageInputCustom = (props) => {
-  const { ticketStatus, ticketId } = props;
+  const { ticketId, ticketUserId } = props;
   const classes = useStyles();
 
   const [medias, setMedias] = useState([]);
@@ -476,6 +479,18 @@ const MessageInputCustom = (props) => {
   const { setReplyingMessage, replyingMessage } =
     useContext(ReplyMessageContext);
   const { user } = useContext(AuthContext);
+
+  // Pedido do Edison (2026-08-26): o Kanban/pipeline deixa qualquer
+  // atendente ver atendimentos que não são dele (proposital, pra dar visão
+  // do time) - mas até aqui também dava pra DIGITAR num atendimento de
+  // outro colega, sem nenhuma trava. Trata como se o ticket não estivesse
+  // "open" (mesmo texto/lógica de disabled já usada em toda essa tela) pra
+  // quem não é o dono nem admin - só acompanha, não escreve.
+  const canType =
+    !ticketUserId ||
+    Number(ticketUserId) === Number(user.id) ||
+    user.profile === "admin";
+  const ticketStatus = canType ? props.ticketStatus : "locked";
 
   const [signMessage, setSignMessage] = useLocalStorage("signOption", true);
 

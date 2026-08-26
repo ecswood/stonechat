@@ -65,9 +65,24 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   const { ticketId } = req.params;
   const { body, quotedMsg }: MessageData = req.body;
   const medias = req.files as Express.Multer.File[];
-  const { companyId } = req.user;
+  const { companyId, id: userId, profile } = req.user;
 
   const ticket = await ShowTicketService(ticketId, companyId);
+
+  // Pedido do Edison (2026-08-26): o pipeline/Kanban deixa qualquer
+  // atendente VER atendimentos que não são dele (proposital, dá visão do
+  // time), mas até aqui também dava pra ENVIAR mensagem num atendimento de
+  // outro colega, sem trava nenhuma - só o frontend escondia/desabilitava,
+  // e isso não impedia uma chamada direta na API. Só quem está com o
+  // ticket (ticket.userId) ou admin pode mandar mensagem; os demais só
+  // acompanham.
+  if (
+    ticket.userId !== null &&
+    Number(ticket.userId) !== Number(userId) &&
+    profile !== "admin"
+  ) {
+    throw new AppError("ERR_NO_PERMISSION", 403);
+  }
 
   // Atendente mandou mensagem manual num ticket em modo "aiTakeover" (IA
   // respondendo por ele) - isso pausa a IA nesse ticket na hora, pra não
