@@ -18,6 +18,7 @@ export interface SgpContrato {
   plano: string;
   status: string;
   endereco: string | null;
+  login: string | null;
 }
 
 export interface SgpClienteCompleto {
@@ -193,7 +194,8 @@ const consultarClienteCompleto = async (
           (c.planotv as string) ||
           "—",
         status: (c.contratoStatusDisplay as string) ?? "",
-        endereco: montarEndereco(c)
+        endereco: montarEndereco(c),
+        login: (c.servico_login as string) || null
       }))
     };
   } catch (err) {

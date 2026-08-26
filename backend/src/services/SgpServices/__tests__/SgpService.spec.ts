@@ -114,6 +114,7 @@ describe("SgpService.consultarClienteCompleto", () => {
             contratoId: 1388,
             contratoStatusDisplay: "Suspenso",
             servico_plano: "RADIO 20MB",
+            servico_login: "edisonvilanova",
             endereco_logradouro: "RUA 7 DE SETEMBRO",
             endereco_numero: 422,
             endereco_complemento: "CASA",
@@ -143,13 +144,15 @@ describe("SgpService.consultarClienteCompleto", () => {
           contratoId: 1388,
           plano: "RADIO 20MB",
           status: "Suspenso",
-          endereco: "RUA 7 DE SETEMBRO, 422 - CASA - VILA NOVA - JOAQUIM TÁVORA/PR - 86455-000"
+          endereco: "RUA 7 DE SETEMBRO, 422 - CASA - VILA NOVA - JOAQUIM TÁVORA/PR - 86455-000",
+          login: "edisonvilanova"
         },
         {
           contratoId: 1993,
           plano: "TELECINE",
           status: "Ativo",
-          endereco: null
+          endereco: null,
+          login: null
         }
       ]
     });

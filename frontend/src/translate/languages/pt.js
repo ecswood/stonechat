@@ -1543,6 +1543,8 @@ const messages = {
           nome: "Nome",
           cpfCnpj: "CPF/CNPJ",
           planos: "Planos/contratos ativos",
+          contratoId: "ID do contrato",
+          login: "Login",
           semContratoAtivo: "Nenhum contrato ativo no momento.",
           naoVinculado: "Este contato não tem CPF/CNPJ vinculado.",
           naoEncontrado: "Nenhum cadastro localizado no SGP para este CPF/CNPJ.",

@@ -874,6 +874,11 @@ const SgpInfo = ({ contactId, ticket }) => {
 									}}
 								/>
 							</div>
+							<Typography className={classes.endereco}>
+								{i18n.t("contactDrawer.sgp.contratoId")}: {contrato.contratoId}
+								{contrato.login &&
+									` · ${i18n.t("contactDrawer.sgp.login")}: ${contrato.login}`}
+							</Typography>
 							{contrato.endereco && (
 								<Typography className={classes.endereco}>
 									{contrato.endereco}
