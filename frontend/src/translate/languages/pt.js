@@ -1559,7 +1559,7 @@ const messages = {
           assignedTo: "Atribuído à:",
           buttons: {
             return: "Retornar",
-            resolve: "Resolver",
+            resolve: "Concluir",
             reopen: "Reabrir",
             accept: "Aceitar",
             download: "Baixar",

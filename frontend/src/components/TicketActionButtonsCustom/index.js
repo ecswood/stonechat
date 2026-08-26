@@ -3,11 +3,12 @@ import { useHistory } from "react-router-dom";
 
 import { makeStyles, createTheme, ThemeProvider } from "@material-ui/core/styles";
 import { IconButton } from "@material-ui/core";
-import { MoreVert, Replay } from "@material-ui/icons";
+import { MoreVert, Replay, SwapHoriz } from "@material-ui/icons";
 
 import { i18n } from "../../translate/i18n";
 import api from "../../services/api";
 import TicketOptionsMenu from "../TicketOptionsMenu";
+import TransferTicketModalCustom from "../TransferTicketModalCustom";
 import ButtonWithSpinner from "../ButtonWithSpinner";
 import toastError from "../../errors/toastError";
 import { AuthContext } from "../../context/Auth/AuthContext";
@@ -35,6 +36,7 @@ const TicketActionButtonsCustom = ({ ticket }) => {
 	const history = useHistory();
 	const [anchorEl, setAnchorEl] = useState(null);
 	const [loading, setLoading] = useState(false);
+	const [transferTicketModalOpen, setTransferTicketModalOpen] = useState(false);
 	const ticketOptionsMenuOpen = Boolean(anchorEl);
 	const { user } = useContext(AuthContext);
 	const { setCurrentTicket } = useContext(TicketsContext);
@@ -96,6 +98,16 @@ const TicketActionButtonsCustom = ({ ticket }) => {
 							<UndoRoundedIcon />
 						</IconButton>
 					</Tooltip>
+					<Tooltip title={i18n.t("ticketOptionsMenu.transfer")}>
+						<IconButton onClick={() => setTransferTicketModalOpen(true)}>
+							<SwapHoriz />
+						</IconButton>
+					</Tooltip>
+					<TransferTicketModalCustom
+						modalOpen={transferTicketModalOpen}
+						onClose={() => setTransferTicketModalOpen(false)}
+						ticketid={ticket.id}
+					/>
 					<ThemeProvider theme={customTheme}>
 						<Tooltip title={i18n.t("messagesList.header.buttons.resolve")}>
 							<IconButton onClick={e => handleUpdateTicketStatus(e, "closed", user?.id)} color="primary">
