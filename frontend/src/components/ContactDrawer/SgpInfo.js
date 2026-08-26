@@ -658,6 +658,7 @@ const DesvincularDialog = ({ open, onClose, contactId, onSuccess }) => {
 };
 
 const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
+	const classes = useStyles();
 	const [contratoId, setContratoId] = useState("");
 	const [conteudo, setConteudo] = useState("");
 	const [loading, setLoading] = useState(false);
@@ -669,6 +670,10 @@ const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
 		setConteudo("");
 		setContratoId(contratos?.length === 1 ? contratos[0].contratoId : "");
 	}, [open, contratos]);
+
+	const contratoSelecionado = (contratos || []).find(
+		c => c.contratoId === contratoId
+	);
 
 	const confirmar = async () => {
 		setLoading(true);
@@ -705,10 +710,20 @@ const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
 							>
 								{contratos.map(c => (
 									<MenuItem key={c.contratoId} value={c.contratoId}>
-										{c.plano}
+										{c.plano} — {i18n.t("contactDrawer.sgp.contratoId")}{" "}
+										{c.contratoId}
+										{c.login && ` · ${i18n.t("contactDrawer.sgp.login")} ${c.login}`}
 									</MenuItem>
 								))}
 							</TextField>
+						)}
+						{contratoSelecionado && (
+							<Typography className={classes.endereco}>
+								{i18n.t("contactDrawer.sgp.contratoId")}:{" "}
+								{contratoSelecionado.contratoId}
+								{contratoSelecionado.login &&
+									` · ${i18n.t("contactDrawer.sgp.login")}: ${contratoSelecionado.login}`}
+							</Typography>
 						)}
 						<TextField
 							fullWidth
