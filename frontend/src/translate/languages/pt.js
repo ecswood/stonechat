@@ -1383,6 +1383,7 @@ const messages = {
         },
       },
       holidays: {
+        title: "Feriados",
         subtitle:
           "Em um feriado cadastrado, o atendimento é tratado como fora do expediente o dia inteiro, mesmo que o horário semanal diria que está aberto.",
         empty: "Nenhum feriado cadastrado.",
