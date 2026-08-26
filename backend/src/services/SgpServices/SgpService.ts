@@ -49,6 +49,12 @@ export interface SgpStatusConexao {
   trafegoSaida: number | null;
 }
 
+export interface SgpTecnico {
+  id: number;
+  username: string;
+  nome: string;
+}
+
 export interface SgpOsAberta {
   osId: number;
   protocolo: string;
@@ -397,20 +403,32 @@ const liberarConfianca = async (
 // criada de verdade - se não vier, trata como falha mesmo com HTTP 200.
 const abrirOs = async (
   contratoId: number,
-  conteudo: string
+  conteudo: string,
+  osTecnicoResponsavel?: string,
+  dataHoraAgendamento?: string
 ): Promise<SgpOsAberta> => {
   try {
+    const payload: Record<string, unknown> = {
+      token: sgpToken(),
+      app: "StoneChat",
+      contrato: contratoId,
+      conteudo
+    };
+    // Só manda se o atendente escolheu - o SGP aceita a OS sem técnico
+    // (fica pra alguém pegar depois) e sem agendamento (atendimento a
+    // qualquer momento), então um campo vazio não deve virar string vazia
+    // no payload.
+    if (osTecnicoResponsavel) {
+      payload.os_tecnico_responsavel = osTecnicoResponsavel;
+    }
+    if (dataHoraAgendamento) {
+      payload.data_hora_agendamento = dataHoraAgendamento;
+    }
+
     const response = await withRetry(() =>
-      axios.post(
-        `${sgpUrl()}/api/central/chamado/`,
-        {
-          token: sgpToken(),
-          app: "StoneChat",
-          contrato: contratoId,
-          conteudo
-        },
-        { timeout: SGP_TIMEOUT_MS }
-      )
+      axios.post(`${sgpUrl()}/api/central/chamado/`, payload, {
+        timeout: SGP_TIMEOUT_MS
+      })
     );
 
     const os = Array.isArray(response.data) ? response.data[0] : response.data;
@@ -431,6 +449,33 @@ const abrirOs = async (
   }
 };
 
+// Endpoint real: POST /api/ura/tecnicos/ (mesma pasta URA das outras
+// consultas token/app). Usado só pra preencher o seletor de técnico
+// responsável no diálogo de Abrir OS - lista todo mundo cadastrado como
+// técnico no SGP, sem filtro de disponibilidade.
+const listarTecnicos = async (): Promise<SgpTecnico[]> => {
+  try {
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/ura/tecnicos/`,
+        { token: sgpToken(), app: "StoneChat" },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
+
+    const tecnicos = Array.isArray(response.data) ? response.data : [];
+    return tecnicos.map((t: Record<string, unknown>) => ({
+      id: (t.id as number) ?? 0,
+      username: (t.username as string) ?? "",
+      nome: (t.nome as string) ?? ""
+    }));
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.listarTecnicos] ${err}`);
+    throw err;
+  }
+};
+
 export default {
   consultarCliente,
   consultarClienteCompleto,
@@ -438,5 +483,6 @@ export default {
   buscarBoleto,
   listarBoletosAbertos,
   liberarConfianca,
-  abrirOs
+  abrirOs,
+  listarTecnicos
 };

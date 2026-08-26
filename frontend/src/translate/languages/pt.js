@@ -1601,6 +1601,9 @@ const messages = {
           abrirOsDescricaoPlaceholder:
             "Ex: Cliente sem internet, ONU com luz vermelha piscando",
           abrirOsSucesso: "OS aberta! Protocolo: {{protocolo}} (OS #{{osId}})",
+          abrirOsTecnico: "Técnico responsável (opcional)",
+          abrirOsSemTecnico: "Sem técnico definido",
+          abrirOsAgendamento: "Agendar data/hora (opcional)",
         },
       },
       fileModal: {

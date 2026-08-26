@@ -657,10 +657,18 @@ const DesvincularDialog = ({ open, onClose, contactId, onSuccess }) => {
 	);
 };
 
+// Converte o valor do input datetime-local (formato "AAAA-MM-DDTHH:MM") pro
+// formato que o SGP espera em data_hora_agendamento ("AAAA-MM-DD HH:MM").
+const paraFormatoSgp = valorDatetimeLocal =>
+	valorDatetimeLocal ? valorDatetimeLocal.replace("T", " ") : "";
+
 const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
 	const classes = useStyles();
 	const [contratoId, setContratoId] = useState("");
 	const [conteudo, setConteudo] = useState("");
+	const [agendamento, setAgendamento] = useState("");
+	const [tecnicoId, setTecnicoId] = useState("");
+	const [tecnicos, setTecnicos] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [resultado, setResultado] = useState(null);
 
@@ -668,7 +676,18 @@ const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
 		if (!open) return;
 		setResultado(null);
 		setConteudo("");
+		setAgendamento("");
+		setTecnicoId("");
 		setContratoId(contratos?.length === 1 ? contratos[0].contratoId : "");
+
+		(async () => {
+			try {
+				const { data } = await api.get("/sgp-tecnicos");
+				setTecnicos(data.tecnicos || []);
+			} catch (err) {
+				setTecnicos([]);
+			}
+		})();
 	}, [open, contratos]);
 
 	const contratoSelecionado = (contratos || []).find(
@@ -681,6 +700,8 @@ const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
 			const { data } = await api.post(`/contacts/${contactId}/sgp-abrir-os`, {
 				contratoId,
 				conteudo,
+				tecnicoResponsavel: tecnicoId || undefined,
+				dataHoraAgendamento: paraFormatoSgp(agendamento) || undefined,
 			});
 			setResultado(data);
 		} catch (err) {
@@ -735,6 +756,32 @@ const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
 							placeholder={i18n.t("contactDrawer.sgp.abrirOsDescricaoPlaceholder")}
 							value={conteudo}
 							onChange={e => setConteudo(e.target.value)}
+						/>
+						<TextField
+							select
+							fullWidth
+							margin="dense"
+							label={i18n.t("contactDrawer.sgp.abrirOsTecnico")}
+							value={tecnicoId}
+							onChange={e => setTecnicoId(e.target.value)}
+						>
+							<MenuItem value="">
+								{i18n.t("contactDrawer.sgp.abrirOsSemTecnico")}
+							</MenuItem>
+							{tecnicos.map(t => (
+								<MenuItem key={t.id} value={t.username}>
+									{t.nome}
+								</MenuItem>
+							))}
+						</TextField>
+						<TextField
+							fullWidth
+							margin="dense"
+							type="datetime-local"
+							label={i18n.t("contactDrawer.sgp.abrirOsAgendamento")}
+							InputLabelProps={{ shrink: true }}
+							value={agendamento}
+							onChange={e => setAgendamento(e.target.value)}
 						/>
 					</>
 				)}

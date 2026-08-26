@@ -136,7 +136,7 @@ export const abrirOs = async (
   res: Response
 ): Promise<Response> => {
   const { contactId } = req.params;
-  const { contratoId, conteudo } = req.body;
+  const { contratoId, conteudo, tecnicoResponsavel, dataHoraAgendamento } = req.body;
   const { companyId } = req.user;
 
   const contact = await ShowContactService(contactId, companyId);
@@ -150,10 +150,31 @@ export const abrirOs = async (
   }
 
   try {
-    const os = await SgpService.abrirOs(contratoId, String(conteudo).trim());
+    const os = await SgpService.abrirOs(
+      contratoId,
+      String(conteudo).trim(),
+      tecnicoResponsavel ? String(tecnicoResponsavel) : undefined,
+      dataHoraAgendamento ? String(dataHoraAgendamento) : undefined
+    );
     return res.json({ vinculado: true, os });
   } catch (err) {
     logger.error(`[SgpController.abrirOs] contactId=${contactId}: ${err}`);
     return res.status(502).json({ vinculado: true, erro: true });
+  }
+};
+
+// Lista os técnicos cadastrados no SGP - usado pra preencher o seletor de
+// "técnico responsável" no diálogo de Abrir OS. Não é específico de um
+// contato, mas fica aqui junto do resto da integração SGP por simplicidade.
+export const listTecnicos = async (
+  _req: Request,
+  res: Response
+): Promise<Response> => {
+  try {
+    const tecnicos = await SgpService.listarTecnicos();
+    return res.json({ tecnicos });
+  } catch (err) {
+    logger.error(`[SgpController.listTecnicos] ${err}`);
+    return res.status(502).json({ erro: true });
   }
 };

@@ -49,6 +49,8 @@ contactRoutes.post(
   SgpController.abrirOs
 );
 
+contactRoutes.get("/sgp-tecnicos", isAuth, SgpController.listTecnicos);
+
 contactRoutes.post("/contacts", isAuth, ContactController.store);
 
 contactRoutes.post("/contacts/upload", isAuth, ContactController.storeUpload);

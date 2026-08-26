@@ -697,6 +697,66 @@ describe("SgpService.abrirOs", () => {
 
     await expect(SgpService.abrirOs(308, "teste")).rejects.toThrow("timeout");
   });
+
+  it("inclui técnico responsável e agendamento no payload quando informados", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: [{ os_id: 841, os_protocolo: "260826100000", os_status: 0, os_data_cadastro: "2026-08-26T10:00:00" }]
+    });
+
+    await SgpService.abrirOs(
+      308,
+      "Instalação agendada",
+      "fabricio",
+      "2026-08-27 14:00"
+    );
+
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/central/chamado/",
+      {
+        token: "token-teste",
+        app: "StoneChat",
+        contrato: 308,
+        conteudo: "Instalação agendada",
+        os_tecnico_responsavel: "fabricio",
+        data_hora_agendamento: "2026-08-27 14:00"
+      },
+      { timeout: 8000 }
+    );
+  });
+});
+
+describe("SgpService.listarTecnicos", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("retorna a lista de técnicos (caso real de produção)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: [
+        { id: 11, username: "clau", nome: "Claudineia de Souza Rodrigues" },
+        { id: 6, username: "fabricio", nome: "Fabricio Candido Rossato" }
+      ]
+    });
+
+    const result = await SgpService.listarTecnicos();
+
+    expect(result).toEqual([
+      { id: 11, username: "clau", nome: "Claudineia de Souza Rodrigues" },
+      { id: 6, username: "fabricio", nome: "Fabricio Candido Rossato" }
+    ]);
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/ura/tecnicos/",
+      { token: "token-teste", app: "StoneChat" },
+      { timeout: 8000 }
+    );
+  });
+
+  it("propaga o erro quando a chamada falha", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(SgpService.listarTecnicos()).rejects.toThrow("timeout");
+  });
 });
 
 describe("SgpService - alerta de indisponibilidade", () => {
