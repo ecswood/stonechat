@@ -23,6 +23,7 @@ import DescriptionIcon from "@material-ui/icons/Description";
 import RouterIcon from "@material-ui/icons/Router";
 import LinkOffIcon from "@material-ui/icons/LinkOff";
 import BuildIcon from "@material-ui/icons/Build";
+import ListAltIcon from "@material-ui/icons/ListAlt";
 import { makeStyles } from "@material-ui/core/styles";
 
 import api from "../../services/api";
@@ -823,6 +824,195 @@ const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
 	);
 };
 
+// Converte o valor do input datetime-local (formato "AAAA-MM-DDTHH:MM") pro
+// formato "AAAA-MM-DD HH:MM:SS" que /api/os/update/id/ exige (com segundos,
+// diferente do formato sem segundos usado no agendamento de abrirOs).
+const paraFormatoSgpComSegundos = valorDatetimeLocal =>
+	valorDatetimeLocal ? `${valorDatetimeLocal.replace("T", " ")}:00` : "";
+
+const agoraParaDatetimeLocal = () => {
+	const agora = new Date();
+	agora.setMinutes(agora.getMinutes() - agora.getTimezoneOffset());
+	return agora.toISOString().slice(0, 16);
+};
+
+const ListarOsDialog = ({ open, onClose, contactId }) => {
+	const classes = useStyles();
+	const [loading, setLoading] = useState(true);
+	const [data, setData] = useState(null);
+	const [fechandoOsId, setFechandoOsId] = useState(null);
+	const [servicoPrestado, setServicoPrestado] = useState("");
+	const [dataFinalizacao, setDataFinalizacao] = useState("");
+	const [salvando, setSalvando] = useState(false);
+
+	const carregar = async () => {
+		setLoading(true);
+		setData(null);
+		try {
+			const { data: response } = await api.get(
+				`/contacts/${contactId}/sgp-os-abertas`
+			);
+			setData(response);
+		} catch (err) {
+			setData({ erro: true });
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	useEffect(() => {
+		if (!open) return;
+		setFechandoOsId(null);
+		carregar();
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [open, contactId]);
+
+	const iniciarFechamento = os => {
+		setFechandoOsId(os.osId);
+		setServicoPrestado("");
+		setDataFinalizacao(agoraParaDatetimeLocal());
+	};
+
+	const confirmarFechamento = async () => {
+		setSalvando(true);
+		try {
+			await api.post("/sgp-fechar-os", {
+				osId: fechandoOsId,
+				servicoPrestado,
+				dataHoraFinalizacao: paraFormatoSgpComSegundos(dataFinalizacao),
+			});
+			toast.success(i18n.t("contactDrawer.sgp.fecharOsSucesso"));
+			setFechandoOsId(null);
+			carregar();
+		} catch (err) {
+			toastError(err);
+		} finally {
+			setSalvando(false);
+		}
+	};
+
+	return (
+		<Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
+			<DialogTitle>{i18n.t("contactDrawer.sgp.listarOsTitulo")}</DialogTitle>
+			<DialogContent>
+				{loading && (
+					<div className={classes.loadingWrapper}>
+						<CircularProgress size={24} />
+					</div>
+				)}
+				{!loading && data?.erro && (
+					<Typography color="error">
+						{i18n.t("contactDrawer.sgp.erro")}
+					</Typography>
+				)}
+				{!loading && data?.vinculado === false && (
+					<Typography color="textSecondary">
+						{i18n.t("contactDrawer.sgp.naoVinculado")}
+					</Typography>
+				)}
+				{!loading && data?.vinculado && data.encontrado === false && (
+					<Typography color="textSecondary">
+						{i18n.t("contactDrawer.sgp.naoEncontrado")}
+					</Typography>
+				)}
+				{!loading && data?.osList?.length === 0 && (
+					<Typography color="textSecondary">
+						{i18n.t("contactDrawer.sgp.semOsAbertas")}
+					</Typography>
+				)}
+				{!loading &&
+					data?.osList?.map(os => (
+						<Paper key={os.osId} variant="outlined" className={classes.boletoCard}>
+							<Typography variant="body2" style={{ fontWeight: 500 }}>
+								OS #{os.osId} — {os.plano}
+							</Typography>
+							<Typography variant="body2" color="textSecondary">
+								{i18n.t("contactDrawer.sgp.protocolo")}: {os.protocolo}
+							</Typography>
+							<Typography variant="body2" style={{ marginTop: 4 }}>
+								{os.conteudo}
+							</Typography>
+							{os.tecnicoResponsavel && (
+								<Typography variant="body2" color="textSecondary">
+									{i18n.t("contactDrawer.sgp.abrirOsTecnico")}:{" "}
+									{os.tecnicoResponsavel}
+								</Typography>
+							)}
+							{os.dataAgendamento && (
+								<Typography variant="body2" color="textSecondary">
+									{i18n.t("contactDrawer.sgp.abrirOsAgendamento")}:{" "}
+									{formatDataHoraBR(os.dataAgendamento)}
+								</Typography>
+							)}
+							<Typography variant="body2" color="textSecondary">
+								{i18n.t("contactDrawer.sgp.dataCadastro")}:{" "}
+								{formatDataHoraBR(os.dataCadastro)}
+							</Typography>
+
+							{fechandoOsId === os.osId ? (
+								<div style={{ marginTop: 8 }}>
+									<TextField
+										fullWidth
+										margin="dense"
+										multiline
+										minRows={2}
+										autoFocus
+										label={i18n.t("contactDrawer.sgp.fecharOsServicoPrestado")}
+										value={servicoPrestado}
+										onChange={e => setServicoPrestado(e.target.value)}
+									/>
+									<TextField
+										fullWidth
+										margin="dense"
+										type="datetime-local"
+										label={i18n.t("contactDrawer.sgp.fecharOsData")}
+										InputLabelProps={{ shrink: true }}
+										value={dataFinalizacao}
+										onChange={e => setDataFinalizacao(e.target.value)}
+									/>
+									<div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+										<Button
+											size="small"
+											variant="contained"
+											color="primary"
+											disabled={salvando || !servicoPrestado.trim()}
+											onClick={confirmarFechamento}
+										>
+											{salvando ? (
+												<CircularProgress size={16} color="inherit" />
+											) : (
+												i18n.t("contactDrawer.sgp.confirmar")
+											)}
+										</Button>
+										<Button
+											size="small"
+											onClick={() => setFechandoOsId(null)}
+											disabled={salvando}
+										>
+											{i18n.t("contactDrawer.sgp.cancelar")}
+										</Button>
+									</div>
+								</div>
+							) : (
+								<Button
+									size="small"
+									style={{ marginTop: 8 }}
+									variant="outlined"
+									onClick={() => iniciarFechamento(os)}
+								>
+									{i18n.t("contactDrawer.sgp.fecharOsBotao")}
+								</Button>
+							)}
+						</Paper>
+					))}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={onClose}>{i18n.t("contactDrawer.sgp.fechar")}</Button>
+			</DialogActions>
+		</Dialog>
+	);
+};
+
 const SgpInfo = ({ contactId, ticket }) => {
 	const classes = useStyles();
 	const [loading, setLoading] = useState(true);
@@ -834,6 +1024,7 @@ const SgpInfo = ({ contactId, ticket }) => {
 	const [resumoOpen, setResumoOpen] = useState(false);
 	const [desvincularOpen, setDesvincularOpen] = useState(false);
 	const [abrirOsOpen, setAbrirOsOpen] = useState(false);
+	const [listarOsOpen, setListarOsOpen] = useState(false);
 
 	const carregarCliente = async () => {
 		if (!contactId) return;
@@ -987,6 +1178,16 @@ const SgpInfo = ({ contactId, ticket }) => {
 							{i18n.t("contactDrawer.sgp.botaoAbrirOs")}
 						</Button>
 					)}
+					{data?.cliente && (
+						<Button
+							size="small"
+							variant="outlined"
+							startIcon={<ListAltIcon />}
+							onClick={() => setListarOsOpen(true)}
+						>
+							{i18n.t("contactDrawer.sgp.botaoListarOs")}
+						</Button>
+					)}
 					{ticket?.id && (
 						<Button
 							size="small"
@@ -1061,6 +1262,11 @@ const SgpInfo = ({ contactId, ticket }) => {
 				onClose={() => setAbrirOsOpen(false)}
 				contactId={contactId}
 				contratos={data?.cliente?.contratos}
+			/>
+			<ListarOsDialog
+				open={listarOsOpen}
+				onClose={() => setListarOsOpen(false)}
+				contactId={contactId}
 			/>
 		</Paper>
 	);

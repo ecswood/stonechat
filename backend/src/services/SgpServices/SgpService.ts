@@ -24,6 +24,7 @@ export interface SgpContrato {
 export interface SgpClienteCompleto {
   nome: string;
   cpfCnpj: string;
+  clienteId: number;
   contratos: SgpContrato[];
 }
 
@@ -60,6 +61,21 @@ export interface SgpOsAberta {
   protocolo: string;
   status: number;
   dataCadastro: string;
+}
+
+export interface SgpOsResumo {
+  osId: number;
+  protocolo: string;
+  status: number;
+  statusTexto: string;
+  conteudo: string;
+  servicoPrestado: string | null;
+  dataCadastro: string;
+  dataAgendamento: string | null;
+  dataFinalizacao: string | null;
+  tecnicoResponsavel: string | null;
+  contratoId: number;
+  plano: string;
 }
 
 export type SgpLiberacaoResultado =
@@ -192,6 +208,7 @@ const consultarClienteCompleto = async (
     return {
       nome: contratos[0].razaoSocial ?? "",
       cpfCnpj: contratos[0].cpfCnpj ?? "",
+      clienteId: (contratos[0].clienteId as number) ?? 0,
       contratos: contratos.map((c: Record<string, unknown>) => ({
         contratoId: (c.contratoId as number) ?? 0,
         plano:
@@ -436,11 +453,16 @@ const abrirOs = async (
       throw new Error("SGP não retornou o ID da OS criada");
     }
 
+    // Bug real encontrado testando ao vivo (2026-08-26): a resposta de
+    // verdade deste endpoint usa campos SEM prefixo `os_` (protocolo,
+    // status) - diferente do exemplo da documentação oficial (que motivou a
+    // primeira versão deste código) e diferente de /api/os/list/, que usa
+    // os_protocolo/os_status normalmente. Aceita os dois formatos.
     return {
       osId: os.os_id,
-      protocolo: os.os_protocolo ?? "",
-      status: os.os_status ?? 0,
-      dataCadastro: os.os_data_cadastro ?? ""
+      protocolo: os.protocolo ?? os.os_protocolo ?? "",
+      status: os.status ?? os.os_status ?? 0,
+      dataCadastro: os.os_data_cadastro ?? os.data_cadastro ?? ""
     };
   } catch (err) {
     Sentry.captureException(err);
@@ -476,12 +498,96 @@ const listarTecnicos = async (): Promise<SgpTecnico[]> => {
   }
 };
 
+// Endpoint real: POST /api/os/list/ (pasta "Ordem de Serviço"). Achado ao
+// vivo (2026-08-26): passar só cliente_id/contrato_id sem `status_encerrada`
+// devolve lista vazia sempre, não importa se a OS existe - status_encerrada
+// parece ser exigido junto pra esse filtro funcionar de verdade (0 = só
+// abertas; 1 = só encerradas; comportamento confirmado testando os dois
+// contra o SGP de produção). Lista por cliente_id, não por contrato - o
+// atendente quer ver toda OS aberta do cliente, não só de um contrato.
+const listarOsAbertas = async (clienteId: number): Promise<SgpOsResumo[]> => {
+  try {
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/os/list/`,
+        {
+          token: sgpToken(),
+          app: "StoneChat",
+          cliente_id: clienteId,
+          status_encerrada: 0
+        },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
+
+    const lista = Array.isArray(response.data) ? response.data : [];
+    return lista.map((o: Record<string, unknown>) => ({
+      osId: (o.os_id as number) ?? 0,
+      protocolo: (o.os_protocolo as string) ?? "",
+      status: (o.os_status as number) ?? 0,
+      statusTexto: (o.os_status_txt as string) ?? "",
+      conteudo: (o.os_conteudo as string) ?? "",
+      servicoPrestado: (o.os_servicoprestado as string) || null,
+      dataCadastro: (o.os_data_cadastro as string) ?? "",
+      dataAgendamento: (o.os_data_agendamento as string) || null,
+      dataFinalizacao: (o.os_data_finalizacao as string) || null,
+      tecnicoResponsavel: (o.os_tecnico_responsavel as string) || null,
+      contratoId: (o.contrato_id as number) ?? 0,
+      plano: (o.plano as string) ?? ""
+    }));
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.listarOsAbertas] clienteId=${clienteId}: ${err}`);
+    throw err;
+  }
+};
+
+// Endpoint real: POST /api/os/update/id/{os_id}/ (mesma pasta). os_status=1
+// fecha a OS (valores confirmados na documentação: 0=Aberta, 1=Encerrada,
+// 2=Em execução, 3=Pendente). `servicoPrestado` é obrigatório na prática -
+// é o "o que foi feito" que o atendente digita; `dataHoraFinalizacao` é
+// opcional (formato "AAAA-MM-DD HH:mm:ss") - se omitida, o SGP usa o
+// horário do servidor dele.
+const fecharOs = async (
+  osId: number,
+  servicoPrestado: string,
+  dataHoraFinalizacao?: string
+): Promise<void> => {
+  try {
+    const payload: Record<string, unknown> = {
+      token: sgpToken(),
+      app: "StoneChat",
+      os_status: 1,
+      os_servicoprestado: servicoPrestado
+    };
+    if (dataHoraFinalizacao) {
+      payload.os_data_finalizacao = dataHoraFinalizacao;
+    }
+
+    const response = await withRetry(() =>
+      axios.post(`${sgpUrl()}/api/os/update/id/${osId}/`, payload, {
+        timeout: SGP_TIMEOUT_MS
+      })
+    );
+
+    if (Number(response.data?.os_id) !== osId) {
+      throw new Error("SGP não confirmou o fechamento da OS");
+    }
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.fecharOs] osId=${osId}: ${err}`);
+    throw err;
+  }
+};
+
 export default {
   consultarCliente,
   consultarClienteCompleto,
   consultarStatusConexao,
   buscarBoleto,
   listarBoletosAbertos,
+  listarOsAbertas,
+  fecharOs,
   liberarConfianca,
   abrirOs,
   listarTecnicos

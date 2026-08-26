@@ -111,6 +111,7 @@ describe("SgpService.consultarClienteCompleto", () => {
           {
             razaoSocial: "EDISON CARLOS DOS SANTOS",
             cpfCnpj: "681.977.569-53",
+            clienteId: 1,
             contratoId: 1388,
             contratoStatusDisplay: "Suspenso",
             servico_plano: "RADIO 20MB",
@@ -139,6 +140,7 @@ describe("SgpService.consultarClienteCompleto", () => {
     expect(result).toEqual({
       nome: "EDISON CARLOS DOS SANTOS",
       cpfCnpj: "681.977.569-53",
+      clienteId: 1,
       contratos: [
         {
           contratoId: 1388,
@@ -634,27 +636,54 @@ describe("SgpService.abrirOs", () => {
     process.env.SGP_TOKEN = "token-teste";
   });
 
-  it("retorna os dados da OS criada (caso real da documentação oficial)", async () => {
+  it("retorna os dados da OS criada (caso real de produção, testado ao vivo em 2026-08-26 - resposta sem prefixo os_)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: {
+        status: 0,
+        razaosocial: "EDISON CARLOS DOS SANTOS",
+        protocolo: "260826113900",
+        ocorrencia_id: 12400,
+        cpfcnpj: "681.977.569-53",
+        os_id: 2502,
+        contrato: 1388,
+        msg: ""
+      }
+    });
+
+    const result = await SgpService.abrirOs(
+      1388,
+      "Sem internet, cliente relata queda total"
+    );
+
+    expect(result).toEqual({
+      osId: 2502,
+      protocolo: "260826113900",
+      status: 0,
+      dataCadastro: ""
+    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/central/chamado/",
+      {
+        token: "token-teste",
+        app: "StoneChat",
+        contrato: 1388,
+        conteudo: "Sem internet, cliente relata queda total"
+      },
+      { timeout: 8000 }
+    );
+  });
+
+  it("também aceita o formato com prefixo os_ (exemplo da documentação oficial, caso a resposta real mude de novo)", async () => {
     (axios.post as jest.Mock).mockResolvedValue({
       data: [
         {
           cliente_id: 500,
           os_status: 0,
-          os_observacao: null,
-          os_motivo_descricao: "Corretiva",
-          os_servicoprestado: null,
           os_protocolo: "200429142914",
           os_conteudo: "Sem internet, cliente relata queda total",
-          servico_online: false,
-          nas_ip: "1.1.1.2",
-          contrato_pop: "ARAGUAINA-TO",
           os_data_cadastro: "2026-08-26T14:29:14.922495",
           os_id: 840,
-          servico_login: "loginppoe8",
-          plano: "30 MB",
-          os_motivo_id: 4,
-          contrato_id: 308,
-          cliente: "EDISON CARLOS DOS SANTOS"
+          contrato_id: 308
         }
       ]
     });
@@ -670,16 +699,6 @@ describe("SgpService.abrirOs", () => {
       status: 0,
       dataCadastro: "2026-08-26T14:29:14.922495"
     });
-    expect(axios.post).toHaveBeenCalledWith(
-      "https://snitelecom.sgp.net.br/api/central/chamado/",
-      {
-        token: "token-teste",
-        app: "StoneChat",
-        contrato: 308,
-        conteudo: "Sem internet, cliente relata queda total"
-      },
-      { timeout: 8000 }
-    );
   });
 
   it("lança erro quando o SGP responde sem os_id (falha silenciosa)", async () => {
@@ -756,6 +775,145 @@ describe("SgpService.listarTecnicos", () => {
     (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
 
     await expect(SgpService.listarTecnicos()).rejects.toThrow("timeout");
+  });
+});
+
+describe("SgpService.listarOsAbertas", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("retorna a lista de OS abertas (caso real de produção, testado ao vivo em 2026-08-26)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          os_id: 2503,
+          os_protocolo: "260826114000",
+          os_status: 0,
+          os_status_txt: "Aberta",
+          os_conteudo: "Teste 2 - aberta pra checar filtro status_encerrada",
+          os_servicoprestado: "",
+          os_data_cadastro: "2026-08-26T11:40:00.000000",
+          os_data_agendamento: null,
+          os_data_finalizacao: null,
+          os_tecnico_responsavel: "",
+          contrato_id: 1388,
+          plano: "RADIO 20MB"
+        }
+      ]
+    });
+
+    const result = await SgpService.listarOsAbertas(1);
+
+    expect(result).toEqual([
+      {
+        osId: 2503,
+        protocolo: "260826114000",
+        status: 0,
+        statusTexto: "Aberta",
+        conteudo: "Teste 2 - aberta pra checar filtro status_encerrada",
+        servicoPrestado: null,
+        dataCadastro: "2026-08-26T11:40:00.000000",
+        dataAgendamento: null,
+        dataFinalizacao: null,
+        tecnicoResponsavel: null,
+        contratoId: 1388,
+        plano: "RADIO 20MB"
+      }
+    ]);
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/os/list/",
+      {
+        token: "token-teste",
+        app: "StoneChat",
+        cliente_id: 1,
+        status_encerrada: 0
+      },
+      { timeout: 8000 }
+    );
+  });
+
+  it("retorna lista vazia quando não há OS aberta", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({ data: [] });
+
+    const result = await SgpService.listarOsAbertas(1);
+
+    expect(result).toEqual([]);
+  });
+
+  it("propaga o erro quando a chamada falha", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(SgpService.listarOsAbertas(1)).rejects.toThrow("timeout");
+  });
+});
+
+describe("SgpService.fecharOs", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("fecha a OS com serviço prestado e data de finalização (caso real de produção)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: { msg: "OS alterada com sucesso", os_id: 2502 }
+    });
+
+    await SgpService.fecharOs(
+      2502,
+      "Teste de fechamento - StoneChat dev",
+      "2026-08-26 11:45:00"
+    );
+
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/os/update/id/2502/",
+      {
+        token: "token-teste",
+        app: "StoneChat",
+        os_status: 1,
+        os_servicoprestado: "Teste de fechamento - StoneChat dev",
+        os_data_finalizacao: "2026-08-26 11:45:00"
+      },
+      { timeout: 8000 }
+    );
+  });
+
+  it("fecha sem data de finalização quando não informada", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: { msg: "OS alterada com sucesso", os_id: 2502 }
+    });
+
+    await SgpService.fecharOs(2502, "Resolvido no telefone");
+
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/os/update/id/2502/",
+      {
+        token: "token-teste",
+        app: "StoneChat",
+        os_status: 1,
+        os_servicoprestado: "Resolvido no telefone"
+      },
+      { timeout: 8000 }
+    );
+  });
+
+  it("lança erro quando o SGP não confirma o os_id fechado", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: { msg: "erro qualquer" }
+    });
+
+    await expect(SgpService.fecharOs(2502, "teste")).rejects.toThrow(
+      "SGP não confirmou o fechamento da OS"
+    );
+  });
+
+  it("propaga o erro quando a chamada falha", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(SgpService.fecharOs(2502, "teste")).rejects.toThrow(
+      "timeout"
+    );
   });
 });
 

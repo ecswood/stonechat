@@ -178,3 +178,63 @@ export const listTecnicos = async (
     return res.status(502).json({ erro: true });
   }
 };
+
+// Lista as OS abertas do cliente (todos os contratos, não só um). Sempre
+// re-consulta o clienteId a partir do CPF/CNPJ do contato (não confia num
+// clienteId vindo do front) - mesmo padrão de todo o resto deste arquivo.
+export const listOsAbertas = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { contactId } = req.params;
+  const { companyId } = req.user;
+
+  const contact = await ShowContactService(contactId, companyId);
+
+  if (!contact.cpfCnpj) {
+    return res.json({ vinculado: false });
+  }
+
+  try {
+    const cliente = await SgpService.consultarClienteCompleto(contact.cpfCnpj);
+
+    if (!cliente) {
+      return res.json({ vinculado: true, encontrado: false });
+    }
+
+    const osList = await SgpService.listarOsAbertas(cliente.clienteId);
+    return res.json({ vinculado: true, encontrado: true, osList });
+  } catch (err) {
+    logger.error(`[SgpController.listOsAbertas] contactId=${contactId}: ${err}`);
+    return res.status(502).json({ vinculado: true, erro: true });
+  }
+};
+
+// Fecha uma OS já existente. `servicoPrestado` é o "o que foi feito" e
+// `dataHoraFinalizacao` (opcional) é a data/hora escolhida pelo atendente -
+// convertida pro formato "AAAA-MM-DD HH:mm:ss" já no front antes de chegar
+// aqui.
+export const fecharOs = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { osId, servicoPrestado, dataHoraFinalizacao } = req.body;
+
+  if (!osId || !String(servicoPrestado || "").trim()) {
+    return res
+      .status(400)
+      .json({ error: "Informe a OS e o que foi feito no atendimento" });
+  }
+
+  try {
+    await SgpService.fecharOs(
+      Number(osId),
+      String(servicoPrestado).trim(),
+      dataHoraFinalizacao ? String(dataHoraFinalizacao) : undefined
+    );
+    return res.json({ sucesso: true });
+  } catch (err) {
+    logger.error(`[SgpController.fecharOs] osId=${osId}: ${err}`);
+    return res.status(502).json({ erro: true });
+  }
+};
