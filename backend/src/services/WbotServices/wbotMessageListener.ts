@@ -84,7 +84,10 @@ import ensureActionMarker from "../../helpers/EnsureActionMarker";
 import { getGreetingForBrasiliaTime } from "../../helpers/GreetingByTime";
 import { delayAiResponse } from "../../helpers/AiResponseDelay";
 import { DEFAULT_SYSTEM_TEMPLATE } from "../../helpers/DefaultSystemTemplate";
+import { v4 as uuidv4 } from "uuid";
 import { buildTicketProtocol } from "../../helpers/TicketProtocol";
+import SgpService from "../SgpServices/SgpService";
+import VerifyIsOutOfHoursService from "../CompanyService/VerifyIsOutOfHoursService";
 import { maskCpfCnpj } from "../../helpers/MaskCpfCnpj";
 import { extractValidCpfCnpj } from "../../helpers/ExtractValidCpfCnpj";
 import { clearAwaitingConfirmation } from "../../helpers/PostDeliveryWaitTag";
@@ -584,6 +587,18 @@ const scheduleTechnicalTransfer = (
       const freshTicket = await ShowTicketService(ticketId, companyId);
       if (freshTicket.queueId !== null) return;
 
+      // Pedido do Edison (2026-08-26): dentro do horário comercial o fluxo
+      // de sempre - transfere pra fila Técnico e um atendente humano pega
+      // dali. Fora do horário (ninguém pra pegar agora), a IA já abre a OS
+      // no SGP sozinha e deixa um aviso interno (system_note) pro atendente
+      // ver assim que voltar, em vez de só deixar o ticket parado na fila
+      // esperando alguém notar. `queueId !== null` acima já garante que
+      // isso roda só uma vez por ticket (não abre OS em dobro).
+      const isOutOfHours = await VerifyIsOutOfHoursService(
+        companyId,
+        "Técnico"
+      );
+
       // Regressão real (Fabricio, 2026-08): mandar com wbot.sendMessage puro
       // e contar com o eco (messages.upsert) pra persistir dependia do eco
       // voltar com o mesmo remoteJid que endereçamos - quando o WhatsApp do
@@ -593,16 +608,61 @@ const scheduleTechnicalTransfer = (
       // mensagem de transferência, sem nenhuma mensagem do cliente).
       // sendAndPersist grava direto no ticket/contato certos, sem depender
       // do eco pra existir no banco.
+      if (!isOutOfHours) {
+        await sendAndPersist(
+          wbot,
+          contact,
+          freshTicket,
+          companyId,
+          formatBody(
+            "Vou te transferir para um agente de suporte técnico. Por favor, aguarde um instante.",
+            contact
+          )
+        );
+        await transferToQueueByName("Técnico", freshTicket, companyId);
+        return;
+      }
+
+      let osAbertaTexto = "Não foi possível abrir a OS automaticamente - abra manualmente pelo botão \"Abrir OS\" no painel.";
+      try {
+        const cliente = contact.cpfCnpj
+          ? await SgpService.consultarCliente(contact.cpfCnpj)
+          : null;
+        if (cliente) {
+          const os = await SgpService.abrirOs(
+            cliente.contratoId,
+            `Aberto automaticamente pela IA - atendimento fora do horário comercial (protocolo #${buildTicketProtocol(
+              freshTicket.id
+            )}). Cliente relatou problema técnico, reinício dos equipamentos não resolveu, fotos enviadas no atendimento.`
+          );
+          osAbertaTexto = `OS aberta automaticamente. Protocolo: ${os.protocolo} (OS #${os.osId}).`;
+        }
+      } catch (e) {
+        Sentry.captureException(e);
+        console.log(e);
+      }
+
       await sendAndPersist(
         wbot,
         contact,
         freshTicket,
         companyId,
         formatBody(
-          "Vou te transferir para um agente de suporte técnico. Por favor, aguarde um instante.",
+          "No momento estamos fora do horário de atendimento. Já registrei sua solicitação e nossa equipe técnica vai analisar assim que o atendimento reabrir.",
           contact
         )
       );
+      await CreateMessageService({
+        messageData: {
+          id: uuidv4(),
+          ticketId: freshTicket.id,
+          body: `🌙 Atendimento fora do horário comercial - diagnóstico técnico não resolveu por N1. ${osAbertaTexto}`,
+          fromMe: true,
+          read: true,
+          mediaType: "system_note"
+        },
+        companyId
+      });
       await transferToQueueByName("Técnico", freshTicket, companyId);
     } catch (e) {
       Sentry.captureException(e);
