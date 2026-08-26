@@ -798,9 +798,11 @@ const messages = {
       transferTicketModal: {
         title: "Transferir Ticket",
         fieldLabel: "Digite para buscar usuários",
+        fieldUserLabel: "Atendente",
         fieldQueueLabel: "Transferir para setor",
         fieldQueuePlaceholder: "Selecione um setor",
         noOptions: "Nenhum usuário encontrado com esse nome",
+        noUserSelected: "Nenhum atendente específico",
         buttons: {
           ok: "Transferir",
           cancel: "Cancelar",
