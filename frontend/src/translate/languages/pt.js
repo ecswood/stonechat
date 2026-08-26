@@ -861,7 +861,6 @@ const messages = {
           ratings: "Avaliações",
           settings: "Configurações",
           helps: "Ajuda",
-          businessHours: "Horário de Atendimento",
           messagesAPI: "API",
           schedules: "Agendamentos",
           campaigns: "Campanhas",
@@ -1381,23 +1380,6 @@ const messages = {
         toasts: {
           deletedAll: "Todas Tags excluídas com sucesso!",
           deleted: "Tag excluído com sucesso.",
-        },
-      },
-      businessHours: {
-        title: "Horário de Atendimento",
-        schedulesUpdated: "Horários atualizados com sucesso.",
-        scheduleTypeUpdated: "Modo de expediente atualizado com sucesso.",
-        updating: "Atualizando...",
-        tabs: {
-          schedules: "Horário Semanal",
-          holidays: "Feriados",
-        },
-        scheduleType: {
-          title: "Modo de expediente",
-          disabled: "Desabilitado (atende 24h)",
-          company: "Por empresa (mesmo horário pra tudo)",
-          queue: "Por fila (cada fila com seu horário)",
-          help: "Define se o horário semanal abaixo (e os feriados) valem pra empresa toda ou só quando configurados por fila.",
         },
       },
       holidays: {

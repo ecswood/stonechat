@@ -16,7 +16,6 @@ import ContactPhoneOutlinedIcon from "@material-ui/icons/ContactPhoneOutlined";
 import AccountTreeOutlinedIcon from "@material-ui/icons/AccountTreeOutlined";
 import FlashOnIcon from "@material-ui/icons/FlashOn";
 import HelpOutlineIcon from "@material-ui/icons/HelpOutline";
-import WatchLaterIcon from "@material-ui/icons/WatchLater";
 import CodeRoundedIcon from "@material-ui/icons/CodeRounded";
 import EventIcon from "@material-ui/icons/Event";
 import LocalOfferIcon from "@material-ui/icons/LocalOffer";
@@ -356,12 +355,6 @@ const MainListItems = (props) => {
         to="/helps"
         primary={i18n.t("mainDrawer.listItems.helps")}
         icon={<HelpOutlineIcon />}
-      />
-
-      <ListItemLink
-        to="/business-hours"
-        primary={i18n.t("mainDrawer.listItems.businessHours")}
-        icon={<WatchLaterIcon />}
       />
 
       <Can
