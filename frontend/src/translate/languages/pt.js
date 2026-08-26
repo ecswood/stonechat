@@ -861,6 +861,7 @@ const messages = {
           ratings: "Avaliações",
           settings: "Configurações",
           helps: "Ajuda",
+          businessHours: "Horário de Atendimento",
           messagesAPI: "API",
           schedules: "Agendamentos",
           campaigns: "Campanhas",
@@ -1380,6 +1381,58 @@ const messages = {
         toasts: {
           deletedAll: "Todas Tags excluídas com sucesso!",
           deleted: "Tag excluído com sucesso.",
+        },
+      },
+      businessHours: {
+        title: "Horário de Atendimento",
+        schedulesUpdated: "Horários atualizados com sucesso.",
+        scheduleTypeUpdated: "Modo de expediente atualizado com sucesso.",
+        updating: "Atualizando...",
+        tabs: {
+          schedules: "Horário Semanal",
+          holidays: "Feriados",
+        },
+        scheduleType: {
+          title: "Modo de expediente",
+          disabled: "Desabilitado (atende 24h)",
+          company: "Por empresa (mesmo horário pra tudo)",
+          queue: "Por fila (cada fila com seu horário)",
+          help: "Define se o horário semanal abaixo (e os feriados) valem pra empresa toda ou só quando configurados por fila.",
+        },
+      },
+      holidays: {
+        subtitle:
+          "Em um feriado cadastrado, o atendimento é tratado como fora do expediente o dia inteiro, mesmo que o horário semanal diria que está aberto.",
+        empty: "Nenhum feriado cadastrado.",
+        table: {
+          date: "Data",
+          description: "Descrição",
+          recurrent: "Todo ano",
+          actions: "Ações",
+          yes: "Sim",
+          no: "Não",
+        },
+        buttons: {
+          add: "Novo Feriado",
+          cancel: "Cancelar",
+          okAdd: "Adicionar",
+          okEdit: "Salvar",
+        },
+        modal: {
+          addTitle: "Novo Feriado",
+          editTitle: "Editar Feriado",
+          date: "Data",
+          description: "Descrição",
+          descriptionPlaceholder: "Ex: Natal, Aniversário da cidade",
+          recurrent: "Repete todo ano (ignora o ano cadastrado)",
+        },
+        confirmationModal: {
+          deleteTitle: "Excluir o feriado",
+          deleteMessage: "Essa ação não pode ser desfeita.",
+        },
+        toasts: {
+          success: "Feriado salvo com sucesso!",
+          deleted: "Feriado excluído com sucesso.",
         },
       },
       settings: {

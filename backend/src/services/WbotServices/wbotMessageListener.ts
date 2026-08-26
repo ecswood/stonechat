@@ -37,6 +37,7 @@ import Queue from "../../models/Queue";
 import QueueOption from "../../models/QueueOption";
 import FindOrCreateATicketTrakingService from "../TicketServices/FindOrCreateATicketTrakingService";
 import VerifyCurrentSchedule from "../CompanyService/VerifyCurrentSchedule";
+import VerifyIsHolidayService from "../HolidayServices/VerifyIsHolidayService";
 import Campaign from "../../models/Campaign";
 import CampaignShipping from "../../models/CampaignShipping";
 import { Op } from "sequelize";
@@ -1180,6 +1181,7 @@ const verifyQueue = async (
       const { schedules }: any = queue;
       const now = moment();
       const weekday = now.format("dddd").toLowerCase();
+      const isHolidayToday = await VerifyIsHolidayService(ticket.companyId);
       let schedule;
       if (Array.isArray(schedules) && schedules.length > 0) {
         schedule = schedules.find(
@@ -1200,7 +1202,7 @@ const verifyQueue = async (
         const startTime = moment(schedule.startTime, "HH:mm");
         const endTime = moment(schedule.endTime, "HH:mm");
 
-        if (now.isBefore(startTime) || now.isAfter(endTime)) {
+        if (isHolidayToday || now.isBefore(startTime) || now.isAfter(endTime)) {
           const body = formatBody(
             `\u200e ${queue.outOfHoursMessage}\n\n*[ # ]* - Voltar ao Menu Principal`,
             ticket.contact
@@ -1947,6 +1949,14 @@ const handleMessage = async (
         key: "scheduleType"
       }
     });
+    // Pedido do Edison (2026-08-26): feriado cadastrado vale como fora do
+    // expediente independente do que o horário semanal diria pro dia -
+    // calculado uma vez só aqui e reaproveitado nas 3 checagens de
+    // fora-do-expediente abaixo (empresa e fila, incluindo a segunda
+    // checagem de fila que roda depois do verifyQueue).
+    const isHolidayToday = scheduleType
+      ? await VerifyIsHolidayService(companyId)
+      : false;
 
     try {
       if (!msg.key.fromMe && scheduleType) {
@@ -1955,8 +1965,8 @@ const handleMessage = async (
          */
         if (
           scheduleType.value === "company" &&
-          !isNil(currentSchedule) &&
-          (!currentSchedule || currentSchedule.inActivity === false)
+          (isHolidayToday ||
+            (!isNil(currentSchedule) && currentSchedule.inActivity === false))
         ) {
           const body = `\u200e ${whatsapp.outOfHoursMessage}`;
 
@@ -2009,7 +2019,7 @@ const handleMessage = async (
             const startTime = moment(schedule.startTime, "HH:mm");
             const endTime = moment(schedule.endTime, "HH:mm");
 
-            if (now.isBefore(startTime) || now.isAfter(endTime)) {
+            if (isHolidayToday || now.isBefore(startTime) || now.isAfter(endTime)) {
               const body = `${queue.outOfHoursMessage}`;
               const debouncedSentMessage = debounce(
                 async () => {
@@ -2166,7 +2176,7 @@ const handleMessage = async (
           const startTime = moment(schedule.startTime, "HH:mm");
           const endTime = moment(schedule.endTime, "HH:mm");
 
-          if (now.isBefore(startTime) || now.isAfter(endTime)) {
+          if (isHolidayToday || now.isBefore(startTime) || now.isAfter(endTime)) {
             const body = queue.outOfHoursMessage;
             const debouncedSentMessage = debounce(
               async () => {
