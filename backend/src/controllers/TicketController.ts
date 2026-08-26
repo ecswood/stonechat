@@ -435,7 +435,12 @@ export const remove = async (
   const { companyId, profile } = req.user;
 
   if (profile !== "admin") {
-    throw new AppError("ERR_NO_PERMISSION", 403);
+    // 400, não 403: nesta app o axios/useAuth trata QUALQUER 403 como token
+    // expirado - tenta refresh_token e, se continuar 403, desloga o usuário
+    // sozinho (ver frontend/src/hooks/useAuth.js). Um 403 aqui faria o
+    // Edison ser deslogado só por não ter permissão pra essa ação
+    // específica, mesmo com a sessão perfeitamente válida.
+    throw new AppError("ERR_NO_PERMISSION");
   }
 
   await ShowTicketService(ticketId, companyId);

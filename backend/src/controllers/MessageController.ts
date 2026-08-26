@@ -81,7 +81,13 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
     Number(ticket.userId) !== Number(userId) &&
     profile !== "admin"
   ) {
-    throw new AppError("ERR_NO_PERMISSION", 403);
+    // 400, não 403: nesta app o axios/useAuth trata QUALQUER 403 como token
+    // expirado - tenta refresh_token e, se continuar 403, desloga o usuário
+    // sozinho (ver frontend/src/hooks/useAuth.js). Foi exatamente isso que
+    // aconteceu ao testar essa trava: digitar/mandar mensagem em ticket de
+    // outro atendente devolvia 403 e derrubava a sessão de quem tentou,
+    // mesmo com o login válido.
+    throw new AppError("ERR_NO_PERMISSION");
   }
 
   // Atendente mandou mensagem manual num ticket em modo "aiTakeover" (IA

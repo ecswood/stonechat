@@ -266,7 +266,7 @@ const ActionButtons = (props) => {
         aria-label="sendMessage"
         component="span"
         onClick={handleSendMessage}
-        disabled={loading}
+        disabled={loading || ticketStatus !== "open"}
       >
         <SendIcon className={classes.sendMessageIcons} />
       </IconButton>
@@ -598,6 +598,10 @@ const MessageInputCustom = (props) => {
 
   const handleSendMessage = async () => {
     if (inputMessage.trim() === "") return;
+    // Trava final, além do input/botão desabilitados - cobre Enter no
+    // teclado e seleção de resposta rápida, que chamam isso direto sem
+    // passar pelo disabled do botão de enviar.
+    if (ticketStatus !== "open") return;
     setLoading(true);
 
     const message = {
