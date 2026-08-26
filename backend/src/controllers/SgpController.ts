@@ -126,3 +126,34 @@ export const desbloquear = async (
     return res.status(502).json({ vinculado: true, erro: true });
   }
 };
+
+// Abre uma Ordem de Serviço no SGP pro contrato escolhido pelo atendente no
+// painel (o cliente pode ter mais de um contrato/plano). `conteudo` é a
+// descrição do problema/motivo digitada pelo atendente - o SGP exige e é o
+// que aparece pro técnico que for atender a OS.
+export const abrirOs = async (
+  req: Request,
+  res: Response
+): Promise<Response> => {
+  const { contactId } = req.params;
+  const { contratoId, conteudo } = req.body;
+  const { companyId } = req.user;
+
+  const contact = await ShowContactService(contactId, companyId);
+
+  if (!contact.cpfCnpj) {
+    return res.json({ vinculado: false });
+  }
+
+  if (!contratoId || !String(conteudo || "").trim()) {
+    return res.status(400).json({ error: "Informe o contrato e a descrição da OS" });
+  }
+
+  try {
+    const os = await SgpService.abrirOs(contratoId, String(conteudo).trim());
+    return res.json({ vinculado: true, os });
+  } catch (err) {
+    logger.error(`[SgpController.abrirOs] contactId=${contactId}: ${err}`);
+    return res.status(502).json({ vinculado: true, erro: true });
+  }
+};

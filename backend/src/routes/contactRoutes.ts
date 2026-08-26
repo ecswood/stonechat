@@ -43,6 +43,12 @@ contactRoutes.post(
   SgpController.desbloquear
 );
 
+contactRoutes.post(
+  "/contacts/:contactId/sgp-abrir-os",
+  isAuth,
+  SgpController.abrirOs
+);
+
 contactRoutes.post("/contacts", isAuth, ContactController.store);
 
 contactRoutes.post("/contacts/upload", isAuth, ContactController.storeUpload);

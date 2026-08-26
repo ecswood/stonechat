@@ -48,6 +48,13 @@ export interface SgpStatusConexao {
   trafegoSaida: number | null;
 }
 
+export interface SgpOsAberta {
+  osId: number;
+  protocolo: string;
+  status: number;
+  dataCadastro: string;
+}
+
 export type SgpLiberacaoResultado =
   | { sucesso: true; protocolo: string; dataPromessa: string }
   | { sucesso: false; motivo: "ja_utilizado" | "erro"; mensagem: string };
@@ -380,11 +387,54 @@ const liberarConfianca = async (
   }
 };
 
+// Endpoint real: POST /api/central/chamado/ (achado 2026-08-26 vasculhando o
+// catálogo Postman oficial, pasta "Central Assinante" - mesma auth token/app
+// das outras consultas deste arquivo, não usa cpfcnpj+senha aqui). A
+// resposta do SGP vem como array com um único objeto (confirmado no exemplo
+// oficial da documentação); `os_id` é o campo que confirma que a OS foi
+// criada de verdade - se não vier, trata como falha mesmo com HTTP 200.
+const abrirOs = async (
+  contratoId: number,
+  conteudo: string
+): Promise<SgpOsAberta> => {
+  try {
+    const response = await withRetry(() =>
+      axios.post(
+        `${sgpUrl()}/api/central/chamado/`,
+        {
+          token: sgpToken(),
+          app: "StoneChat",
+          contrato: contratoId,
+          conteudo
+        },
+        { timeout: SGP_TIMEOUT_MS }
+      )
+    );
+
+    const os = Array.isArray(response.data) ? response.data[0] : response.data;
+    if (!os?.os_id) {
+      throw new Error("SGP não retornou o ID da OS criada");
+    }
+
+    return {
+      osId: os.os_id,
+      protocolo: os.os_protocolo ?? "",
+      status: os.os_status ?? 0,
+      dataCadastro: os.os_data_cadastro ?? ""
+    };
+  } catch (err) {
+    Sentry.captureException(err);
+    logger.error(`[SgpService.abrirOs] contratoId=${contratoId}: ${err}`);
+    throw err;
+  }
+};
+
 export default {
   consultarCliente,
   consultarClienteCompleto,
   consultarStatusConexao,
   buscarBoleto,
   listarBoletosAbertos,
-  liberarConfianca
+  liberarConfianca,
+  abrirOs
 };

@@ -625,6 +625,77 @@ describe("SgpService.liberarConfianca", () => {
   });
 });
 
+describe("SgpService.abrirOs", () => {
+  beforeEach(() => {
+    process.env.SGP_URL = "https://snitelecom.sgp.net.br";
+    process.env.SGP_TOKEN = "token-teste";
+  });
+
+  it("retorna os dados da OS criada (caso real da documentação oficial)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: [
+        {
+          cliente_id: 500,
+          os_status: 0,
+          os_observacao: null,
+          os_motivo_descricao: "Corretiva",
+          os_servicoprestado: null,
+          os_protocolo: "200429142914",
+          os_conteudo: "Sem internet, cliente relata queda total",
+          servico_online: false,
+          nas_ip: "1.1.1.2",
+          contrato_pop: "ARAGUAINA-TO",
+          os_data_cadastro: "2026-08-26T14:29:14.922495",
+          os_id: 840,
+          servico_login: "loginppoe8",
+          plano: "30 MB",
+          os_motivo_id: 4,
+          contrato_id: 308,
+          cliente: "EDISON CARLOS DOS SANTOS"
+        }
+      ]
+    });
+
+    const result = await SgpService.abrirOs(
+      308,
+      "Sem internet, cliente relata queda total"
+    );
+
+    expect(result).toEqual({
+      osId: 840,
+      protocolo: "200429142914",
+      status: 0,
+      dataCadastro: "2026-08-26T14:29:14.922495"
+    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "https://snitelecom.sgp.net.br/api/central/chamado/",
+      {
+        token: "token-teste",
+        app: "StoneChat",
+        contrato: 308,
+        conteudo: "Sem internet, cliente relata queda total"
+      },
+      { timeout: 8000 }
+    );
+  });
+
+  it("lança erro quando o SGP responde sem os_id (falha silenciosa)", async () => {
+    (axios.post as jest.Mock).mockResolvedValue({
+      data: [{ os_status: null }]
+    });
+
+    await expect(SgpService.abrirOs(308, "teste")).rejects.toThrow(
+      "SGP não retornou o ID da OS criada"
+    );
+  });
+
+  it("propaga o erro quando a chamada falha", async () => {
+    (axios.post as jest.Mock).mockRejectedValue(new Error("timeout"));
+
+    await expect(SgpService.abrirOs(308, "teste")).rejects.toThrow("timeout");
+  });
+});
+
 describe("SgpService - alerta de indisponibilidade", () => {
   beforeEach(async () => {
     jest.clearAllMocks();

@@ -1592,6 +1592,13 @@ const messages = {
           desvincularConfirmacao:
             "Isso vai remover o CPF/CNPJ vinculado a este número de WhatsApp. Na próxima vez que o cliente falar com a IA, ela vai pedir o documento de novo. Confirma?",
           desvincularSucesso: "CPF/CNPJ desvinculado deste número.",
+          botaoAbrirOs: "Abrir OS",
+          abrirOsTitulo: "Abrir Ordem de Serviço",
+          abrirOsContrato: "Contrato",
+          abrirOsDescricao: "Descrição do problema",
+          abrirOsDescricaoPlaceholder:
+            "Ex: Cliente sem internet, ONU com luz vermelha piscando",
+          abrirOsSucesso: "OS aberta! Protocolo: {{protocolo}} (OS #{{osId}})",
         },
       },
       fileModal: {

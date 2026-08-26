@@ -12,6 +12,8 @@ import DialogContent from "@material-ui/core/DialogContent";
 import DialogContentText from "@material-ui/core/DialogContentText";
 import DialogActions from "@material-ui/core/DialogActions";
 import IconButton from "@material-ui/core/IconButton";
+import TextField from "@material-ui/core/TextField";
+import MenuItem from "@material-ui/core/MenuItem";
 import ReceiptIcon from "@material-ui/icons/Receipt";
 import LockOpenIcon from "@material-ui/icons/LockOpen";
 import AndroidIcon from "@material-ui/icons/Android";
@@ -20,6 +22,7 @@ import RefreshIcon from "@material-ui/icons/Refresh";
 import DescriptionIcon from "@material-ui/icons/Description";
 import RouterIcon from "@material-ui/icons/Router";
 import LinkOffIcon from "@material-ui/icons/LinkOff";
+import BuildIcon from "@material-ui/icons/Build";
 import { makeStyles } from "@material-ui/core/styles";
 
 import api from "../../services/api";
@@ -654,6 +657,110 @@ const DesvincularDialog = ({ open, onClose, contactId, onSuccess }) => {
 	);
 };
 
+const AbrirOsDialog = ({ open, onClose, contactId, contratos }) => {
+	const [contratoId, setContratoId] = useState("");
+	const [conteudo, setConteudo] = useState("");
+	const [loading, setLoading] = useState(false);
+	const [resultado, setResultado] = useState(null);
+
+	useEffect(() => {
+		if (!open) return;
+		setResultado(null);
+		setConteudo("");
+		setContratoId(contratos?.length === 1 ? contratos[0].contratoId : "");
+	}, [open, contratos]);
+
+	const confirmar = async () => {
+		setLoading(true);
+		try {
+			const { data } = await api.post(`/contacts/${contactId}/sgp-abrir-os`, {
+				contratoId,
+				conteudo,
+			});
+			setResultado(data);
+		} catch (err) {
+			toastError(err);
+			setResultado({ erro: true });
+		} finally {
+			setLoading(false);
+		}
+	};
+
+	const podeConfirmar = Boolean(contratoId) && conteudo.trim().length > 0;
+
+	return (
+		<Dialog open={open} onClose={onClose} fullWidth maxWidth="xs">
+			<DialogTitle>{i18n.t("contactDrawer.sgp.abrirOsTitulo")}</DialogTitle>
+			<DialogContent>
+				{!resultado && (
+					<>
+						{(contratos || []).length > 1 && (
+							<TextField
+								select
+								fullWidth
+								margin="dense"
+								label={i18n.t("contactDrawer.sgp.abrirOsContrato")}
+								value={contratoId}
+								onChange={e => setContratoId(e.target.value)}
+							>
+								{contratos.map(c => (
+									<MenuItem key={c.contratoId} value={c.contratoId}>
+										{c.plano}
+									</MenuItem>
+								))}
+							</TextField>
+						)}
+						<TextField
+							fullWidth
+							margin="dense"
+							multiline
+							minRows={3}
+							autoFocus
+							label={i18n.t("contactDrawer.sgp.abrirOsDescricao")}
+							placeholder={i18n.t("contactDrawer.sgp.abrirOsDescricaoPlaceholder")}
+							value={conteudo}
+							onChange={e => setConteudo(e.target.value)}
+						/>
+					</>
+				)}
+				{resultado?.vinculado === false && (
+					<Typography color="textSecondary">
+						{i18n.t("contactDrawer.sgp.naoVinculado")}
+					</Typography>
+				)}
+				{resultado?.erro && (
+					<Typography color="error">{i18n.t("contactDrawer.sgp.erro")}</Typography>
+				)}
+				{resultado?.os && (
+					<Typography style={{ color: "#2E7D32" }}>
+						{i18n.t("contactDrawer.sgp.abrirOsSucesso", {
+							protocolo: resultado.os.protocolo,
+							osId: resultado.os.osId,
+						})}
+					</Typography>
+				)}
+			</DialogContent>
+			<DialogActions>
+				<Button onClick={onClose}>{i18n.t("contactDrawer.sgp.fechar")}</Button>
+				{!resultado && (
+					<Button
+						onClick={confirmar}
+						color="primary"
+						variant="contained"
+						disabled={loading || !podeConfirmar}
+					>
+						{loading ? (
+							<CircularProgress size={18} />
+						) : (
+							i18n.t("contactDrawer.sgp.confirmar")
+						)}
+					</Button>
+				)}
+			</DialogActions>
+		</Dialog>
+	);
+};
+
 const SgpInfo = ({ contactId, ticket }) => {
 	const classes = useStyles();
 	const [loading, setLoading] = useState(true);
@@ -664,6 +771,7 @@ const SgpInfo = ({ contactId, ticket }) => {
 	const [retornarIaOpen, setRetornarIaOpen] = useState(false);
 	const [resumoOpen, setResumoOpen] = useState(false);
 	const [desvincularOpen, setDesvincularOpen] = useState(false);
+	const [abrirOsOpen, setAbrirOsOpen] = useState(false);
 
 	const carregarCliente = async () => {
 		if (!contactId) return;
@@ -802,6 +910,16 @@ const SgpInfo = ({ contactId, ticket }) => {
 					>
 						{i18n.t("contactDrawer.sgp.botaoDesbloquear")}
 					</Button>
+					{data?.cliente && (
+						<Button
+							size="small"
+							variant="outlined"
+							startIcon={<BuildIcon />}
+							onClick={() => setAbrirOsOpen(true)}
+						>
+							{i18n.t("contactDrawer.sgp.botaoAbrirOs")}
+						</Button>
+					)}
 					{ticket?.id && (
 						<Button
 							size="small"
@@ -870,6 +988,12 @@ const SgpInfo = ({ contactId, ticket }) => {
 				onClose={() => setDesvincularOpen(false)}
 				contactId={contactId}
 				onSuccess={carregarCliente}
+			/>
+			<AbrirOsDialog
+				open={abrirOsOpen}
+				onClose={() => setAbrirOsOpen(false)}
+				contactId={contactId}
+				contratos={data?.cliente?.contratos}
 			/>
 		</Paper>
 	);
