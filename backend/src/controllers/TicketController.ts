@@ -422,12 +422,21 @@ export const pull = async (
   return res.status(200).json(ticket);
 };
 
+// Pedido do Edison (2026-08-26): deletar ticket é só pra admin. O frontend
+// já escondia o botão via regra "ticket-options:deleteTicket" (ver
+// frontend/src/rules.js), mas isso é só cosmético - qualquer usuário
+// autenticado conseguia chamar essa rota direto (curl/devtools) e deletar
+// mesmo sem ver o botão. Essa checagem é o que garante de verdade.
 export const remove = async (
   req: Request,
   res: Response
 ): Promise<Response> => {
   const { ticketId } = req.params;
-  const { companyId } = req.user;
+  const { companyId, profile } = req.user;
+
+  if (profile !== "admin") {
+    throw new AppError("ERR_NO_PERMISSION", 403);
+  }
 
   await ShowTicketService(ticketId, companyId);
 
