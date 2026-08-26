@@ -1,0 +1,3 @@
+fix: ajusta texto da mensagem ao cliente na abertura de OS fora do horario
+
+Frase definida pelo Edison, personalizada com {{firstName}} do contato.

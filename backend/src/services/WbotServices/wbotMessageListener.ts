@@ -648,7 +648,7 @@ const scheduleTechnicalTransfer = (
         freshTicket,
         companyId,
         formatBody(
-          "No momento estamos fora do horário de atendimento. Já registrei sua solicitação e nossa equipe técnica vai analisar assim que o atendimento reabrir.",
+          "{{firstName}}, Percebi que o seu caso precisa da atenção de um dos nossos técnicos especialistas. Já deixei o seu histórico pronto e priorizado na fila de atendimento. Nossa equipe humana assume às 08h em nosso próximo dia útil e dará sequência imediata à sua solução. Muito obrigado pela confiança e compreensão!",
           contact
         )
       );
