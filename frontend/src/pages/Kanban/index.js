@@ -174,7 +174,9 @@ const Kanban = () => {
       <Board
         data={file}
         onCardMoveAcrossLanes={handleCardMove}
-        style={{ backgroundColor: "rgba(252, 252, 252, 0.03)" }}
+        style={{ backgroundColor: "rgba(252, 252, 252, 0.03)", padding: 4 }}
+        laneStyle={{ margin: "0 3px", padding: "6px" }}
+        cardStyle={{ padding: "6px 8px", marginBottom: "4px" }}
       />
     </div>
   );
