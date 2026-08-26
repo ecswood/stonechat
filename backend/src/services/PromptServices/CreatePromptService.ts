@@ -7,6 +7,7 @@ interface PromptData {
     name: string;
     apiKey: string;
     prompt: string;
+    systemTemplate?: string;
     maxTokens?: number;
     temperature?: number;
     promptTokens?: number;

@@ -18,6 +18,7 @@ import { MenuItem, FormControl, InputLabel, Select, Menu, Grid } from "@material
 import { Visibility, VisibilityOff } from "@material-ui/icons";
 import { InputAdornment, IconButton } from "@material-ui/core";
 import QueueSelectSingle from "../../components/QueueSelectSingle";
+import ConfirmationModal from "../ConfirmationModal";
 
 import api from "../../services/api";
 import toastError from "../../errors/toastError";
@@ -79,6 +80,7 @@ const PromptModal = ({ open, onClose, promptId, refreshPrompts }) => {
     const initialState = {
         name: "",
         prompt: "",
+        systemTemplate: "",
         model: "gpt-3.5-turbo-1106",
         maxTokens: 100,
         temperature: 1,
@@ -88,26 +90,47 @@ const PromptModal = ({ open, onClose, promptId, refreshPrompts }) => {
     };
 
     const [prompt, setPrompt] = useState(initialState);
+    const [defaultTemplate, setDefaultTemplate] = useState("");
+    const [confirmRestoreOpen, setConfirmRestoreOpen] = useState(false);
 
     useEffect(() => {
         const fetchPrompt = async () => {
+            let template = defaultTemplate;
+            if (!template) {
+                try {
+                    const { data } = await api.get("/prompt-default-template");
+                    template = data.template;
+                    setDefaultTemplate(template);
+                } catch (err) {
+                    toastError(err);
+                }
+            }
+
             if (!promptId) {
-                setPrompt(initialState);
+                setPrompt({ ...initialState, systemTemplate: template });
                 return;
             }
             try {
                 const { data } = await api.get(`/prompt/${promptId}`);
                 setPrompt(prevState => {
-                    return { ...prevState, ...data };
+                    return {
+                        ...prevState,
+                        ...data,
+                        // Campo nunca fica em branco - mostra sempre o texto
+                        // que está efetivamente em uso (o padrão, quando o
+                        // prompt ainda não tem um próprio).
+                        systemTemplate: data.systemTemplate || template,
+                    };
                 });
-                
+
                 setSelectedModel(data.model);
-            } catch (err) { 
+            } catch (err) {
                 toastError(err);
             }
         };
 
         fetchPrompt();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [promptId, open]);
 
     const handleClose = () => {
@@ -166,7 +189,7 @@ const PromptModal = ({ open, onClose, promptId, refreshPrompts }) => {
                         }, 400);
                     }}
                 >
-                    {({ touched, errors, isSubmitting, values }) => (
+                    {({ touched, errors, isSubmitting, values, setFieldValue }) => (
                         <Form style={{ width: "100%" }}>
                             <DialogContent dividers>
                                 <Field
@@ -213,6 +236,32 @@ const PromptModal = ({ open, onClose, promptId, refreshPrompts }) => {
                                     rows={10}
                                     multiline={true}
                                 />
+                                <Field
+                                    as={TextField}
+                                    label={i18n.t("promptModal.form.systemTemplate")}
+                                    name="systemTemplate"
+                                    helperText={i18n.t("promptModal.form.systemTemplateHelp")}
+                                    variant="outlined"
+                                    margin="dense"
+                                    fullWidth
+                                    rows={14}
+                                    multiline={true}
+                                />
+                                <Button
+                                    size="small"
+                                    onClick={() => setConfirmRestoreOpen(true)}
+                                    style={{ marginBottom: 8 }}
+                                >
+                                    {i18n.t("promptModal.form.restoreDefaultTemplate")}
+                                </Button>
+                                <ConfirmationModal
+                                    title={i18n.t("promptModal.form.restoreDefaultTemplate")}
+                                    open={confirmRestoreOpen}
+                                    onClose={() => setConfirmRestoreOpen(false)}
+                                    onConfirm={() => setFieldValue("systemTemplate", defaultTemplate)}
+                                >
+                                    {i18n.t("promptModal.form.restoreDefaultTemplateConfirm")}
+                                </ConfirmationModal>
                                 <QueueSelectSingle touched={touched} errors={errors}/>
                                 <div className={classes.multFieldLine}>
                                     <FormControl fullWidth margin="dense" variant="outlined">

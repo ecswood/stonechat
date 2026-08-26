@@ -9,6 +9,12 @@ promptRoutes.get("/prompt", isAuth, PromptController.index);
 
 promptRoutes.post("/prompt", isAuth, PromptController.store);
 
+promptRoutes.get(
+  "/prompt-default-template",
+  isAuth,
+  PromptController.defaultTemplate
+);
+
 promptRoutes.get("/prompt/:promptId", isAuth, PromptController.show);
 
 promptRoutes.put("/prompt/:promptId", isAuth, PromptController.update);

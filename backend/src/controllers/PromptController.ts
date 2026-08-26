@@ -8,6 +8,7 @@ import UpdatePromptService from "../services/PromptServices/UpdatePromptService"
 import Whatsapp from "../models/Whatsapp";
 import { verify } from "jsonwebtoken";
 import authConfig from "../config/auth";
+import { DEFAULT_SYSTEM_TEMPLATE } from "../helpers/DefaultSystemTemplate";
 
 interface TokenPayload {
   id: string;
@@ -39,8 +40,8 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   const [, token] = authHeader.split(" ");
   const decoded = verify(token, authConfig.secret);
   const { companyId } = decoded as TokenPayload;
-  const { name, apiKey, prompt, maxTokens, temperature, promptTokens, completionTokens, totalTokens, queueId, maxMessages, model} = req.body;
-  const promptTable = await CreatePromptService({ name, apiKey, prompt, maxTokens, temperature, promptTokens, completionTokens, totalTokens, queueId, maxMessages, companyId, model });
+  const { name, apiKey, prompt, systemTemplate, maxTokens, temperature, promptTokens, completionTokens, totalTokens, queueId, maxMessages, model} = req.body;
+  const promptTable = await CreatePromptService({ name, apiKey, prompt, systemTemplate, maxTokens, temperature, promptTokens, completionTokens, totalTokens, queueId, maxMessages, companyId, model });
 
   const io = getIO();
   io.to(`company-${companyId}-mainchannel`).emit("prompt", {
@@ -49,6 +50,18 @@ export const store = async (req: Request, res: Response): Promise<Response> => {
   });
 
   return res.status(200).json(promptTable);
+};
+
+// Pedido do Edison (2026-08-26): botão "Restaurar padrão" no painel Open.Ai
+// e pré-preenchimento do campo quando o prompt ainda não tem
+// systemTemplate próprio - fica num endpoint fixo, não sob /prompt/:id,
+// pra não conflitar com essa rota (Express casaria "default-template" como
+// se fosse um promptId).
+export const defaultTemplate = async (
+  _req: Request,
+  res: Response
+): Promise<Response> => {
+  return res.status(200).json({ template: DEFAULT_SYSTEM_TEMPLATE });
 };
 
 export const show = async (req: Request, res: Response): Promise<Response> => {

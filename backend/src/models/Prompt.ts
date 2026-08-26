@@ -28,6 +28,14 @@ class Prompt extends Model<Prompt> {
   @Column
   prompt: string;
 
+  // Pedido do Edison (2026-08-26): template completo do prompt de sistema
+  // (saudação, fluxo técnico, frases de Ação), editável pelo painel Open.Ai.
+  // Quando vazio, o código usa DEFAULT_SYSTEM_TEMPLATE (ver
+  // helpers/DefaultSystemTemplate.ts) - nunca fica sem prompt de sistema.
+  @AllowNull
+  @Column
+  systemTemplate: string;
+
   @AllowNull(false)
   @Column
   apiKey: string;

@@ -523,6 +523,12 @@ const messages = {
           temperature: "Temperatura",
           apikey: "API Key",
           max_messages: "Máximo de mensagens no Histórico",
+          systemTemplate: "Template avançado do prompt de sistema (opcional)",
+          systemTemplateHelp:
+            "Controla saudação, fluxo técnico e as frases de Ação que a IA usa pra buscar boleto/bloqueio/etc de verdade no SGP. Deixe em branco pra usar o padrão. Se for editar: as frases entre aspas simples (ex: 'Ação: Buscar Boleto') têm que continuar exatamente assim em algum lugar do texto — apagar ou reescrever uma delas faz a IA parar de consultar o sistema real e passar a inventar respostas.",
+          restoreDefaultTemplate: "Restaurar padrão",
+          restoreDefaultTemplateConfirm:
+            "Isso substitui o texto atual deste campo pelo padrão do sistema. Continuar?",
         },
         formErrors: {
           name: {
