@@ -63,7 +63,8 @@ import {
   dispatchAiAction,
   isAiHandledTicket,
   isTechnicalDiagnosticTicket,
-  transferToQueueByName
+  transferToQueueByName,
+  sendAndPersist
 } from "./AiAgentActions";
 import { verifyRating, handleRating, parseValidRating } from "./RatingHandler";
 import {
@@ -567,7 +568,6 @@ const deleteFileSync = (path: string): void => {
 // nesse meio tempo (queueId não é mais null), desiste silenciosamente.
 const scheduleTechnicalTransfer = (
   wbot: WASocket,
-  remoteJid: string,
   ticketId: number,
   contact: Contact,
   companyId: number
@@ -581,12 +581,25 @@ const scheduleTechnicalTransfer = (
       const freshTicket = await ShowTicketService(ticketId, companyId);
       if (freshTicket.queueId !== null) return;
 
-      await wbot.sendMessage(remoteJid, {
-        text: formatBody(
+      // Regressão real (Fabricio, 2026-08): mandar com wbot.sendMessage puro
+      // e contar com o eco (messages.upsert) pra persistir dependia do eco
+      // voltar com o mesmo remoteJid que endereçamos - quando o WhatsApp do
+      // cliente está numa fase "@lid" (identidade privada), o eco pode
+      // voltar num JID diferente do real, e o handleMessage cria um contato
+      // e ticket fantasma pra esse "número" (o ticket fica só com essa
+      // mensagem de transferência, sem nenhuma mensagem do cliente).
+      // sendAndPersist grava direto no ticket/contato certos, sem depender
+      // do eco pra existir no banco.
+      await sendAndPersist(
+        wbot,
+        contact,
+        freshTicket,
+        companyId,
+        formatBody(
           "Vou te transferir para um agente de suporte técnico. Por favor, aguarde um instante.",
           contact
         )
-      });
+      );
       await transferToQueueByName("Técnico", freshTicket, companyId);
     } catch (e) {
       Sentry.captureException(e);
@@ -1688,6 +1701,23 @@ const handleMessage = async (
 
   if (!isValidMsg(msg)) return;
   try {
+    // Regressão real (Fabricio, 2026-08): toda mensagem fromMe (inclusive as
+    // que o próprio sistema já mandou e persistiu direto, ex: sendAndPersist/
+    // SendWhatsAppMessage) volta pra cá de novo como "eco" via
+    // messages.upsert - normalmente inofensivo porque o remoteJid do eco
+    // bate com o mesmo contato/ticket de sempre. Mas quando o WhatsApp do
+    // destinatário está endereçado por identidade "@lid" (privacidade), o
+    // eco pode voltar com um remoteJid DIFERENTE do que usamos pra enviar,
+    // fazendo o código abaixo criar um contato e ticket fantasma pra esse
+    // "número" - e pior, o upsert por id em CreateMessageService reatribuiria
+    // a mensagem, que já estava correta, pro ticket fantasma. Se essa
+    // mensagem já está gravada (mesmo id), o trabalho já foi feito por quem
+    // mandou - não precisa (e não deve) reprocessar o eco.
+    if (msg.key.fromMe && msg.key.id) {
+      const alreadyPersisted = await Message.findByPk(msg.key.id);
+      if (alreadyPersisted) return;
+    }
+
     const isGroup = msg.key.remoteJid?.endsWith("@g.us");
 
     if (!isGroup) {
@@ -1924,7 +1954,6 @@ const handleMessage = async (
       ) {
         scheduleTechnicalTransfer(
           wbot as WASocket,
-          msg.key.remoteJid!,
           ticket.id,
           contact,
           companyId
