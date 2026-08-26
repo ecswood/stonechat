@@ -2018,8 +2018,22 @@ const handleMessage = async (
       ? await VerifyIsHolidayService(companyId)
       : false;
 
+    // Pedido do Edison (2026-08-26): a IA precisa continuar tentando
+    // resolver o caso (passo a passo N1) mesmo fora do horário comercial -
+    // só a ESCALAÇÃO pra atendimento humano que respeita o horário (ver
+    // scheduleTechnicalTransfer/VerifyIsOutOfHoursService, que abre OS
+    // automaticamente e avisa o cliente quando isso acontece fora de
+    // hora). Por isso o aviso genérico de "fora do expediente" abaixo só
+    // vale pra tickets que já não seriam tratados pela IA mesmo (sem
+    // promptId configurado, já em fila, ou já com atendente humano) -
+    // senão a IA nunca chegaria a rodar fora do horário e o cliente ficava
+    // sem resposta nenhuma (regressão real: testado ao vivo em 2026-08-26,
+    // cliente mandou 5 mensagens fora do horário e não recebeu nada).
+    const isAiEligibleTicket =
+      !ticket.queue && !ticket.userId && !isNil(whatsapp.promptId);
+
     try {
-      if (!msg.key.fromMe && scheduleType) {
+      if (!msg.key.fromMe && scheduleType && !isAiEligibleTicket) {
         /**
          * Tratamento para envio de mensagem quando a empresa está fora do expediente
          */
